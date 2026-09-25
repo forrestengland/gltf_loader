@@ -244,6 +244,8 @@ int main(int argc, char* argv[]) {
     printf("position %d x:%f, y:%f z:%f\n", i/3, positions[i], positions[i+1], positions[i+2]);
   }
 
+  free(positions);
+
   cJSON_Delete(root);
   
   return 0;
