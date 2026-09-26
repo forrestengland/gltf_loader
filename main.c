@@ -2,6 +2,23 @@
 #include <stdlib.h>
 #include "cJSON.h"
 
+typedef struct {
+  
+  const char *uri;
+
+  int position_byte_offset;
+  int vertex_count;
+
+  int index_byte_offset;
+  int index_count;
+  int index_component_type;
+
+  int normal_byte_offset;
+  int normal_count;
+  int normal_component_type;
+  
+} MeshInfo;
+
 // read a text file and return the contents
 // remember to free the returned string
 char* read_file(const char* filename) {
@@ -61,7 +78,8 @@ cJSON* parse_gltf(const char* filename) {
 
 // process the cJSON object. returns the path to the binary file
 // sets the binary file byte offset and vertex count for the position vertices
-const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* index_byte_offset, int* index_count, int* index_component_type) {
+//const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* index_byte_offset, int* index_count, int* index_component_type) {
+const char* process_json(cJSON* root, MeshInfo* info) {
 
   cJSON *meshes = cJSON_GetObjectItem(root, "meshes");
 
@@ -115,6 +133,16 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* 
   printf("POSITION accessor: %d\n", position->valueint);
   int position_accessor = position->valueint;
 
+  cJSON *normal = cJSON_GetObjectItem(attributes, "NORMAL");
+
+  if (!normal || !cJSON_IsNumber(normal)) {
+    fprintf(stderr, "NORMAL not found or isn't a number\n");
+    return NULL;
+  }
+
+  printf("NORMAL accessor: %d\n", normal->valueint);
+  int normal_accessor = normal->valueint;
+
   cJSON *indices = cJSON_GetObjectItem(primitive, "indices");
 
   if (!indices || !cJSON_IsNumber(indices)) {
@@ -150,6 +178,23 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* 
 
   printf("accessor %d has a count of %d, %d bytes\n", position_accessor, count, count * 12);
 
+  accessor = cJSON_GetArrayItem(accessors, normal_accessor);
+
+  if (!accessor) {
+    fprintf(stderr, "No normal accessor\n");
+    return NULL;
+  }
+
+  // get relevant data from accessor
+  int normalBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint; // index to buffer view to find binary file offset
+  int normalComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint; // 5126 - float
+  int normalCount = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
+  const char *normalType = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
+
+  printf("normal accessor %d has normalBufferViewIndex %d, normalComponentType %d, normalCount %d\n", normal_accessor, normalBufferViewIndex, normalComponentType, normalCount);
+  info->normal_count = normalCount;
+  info->normal_component_type = normalComponentType;
+
   accessor = cJSON_GetArrayItem(accessors, index_accessor);
 
   if (!accessor) {
@@ -162,8 +207,8 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* 
   printf("index component type: %d\n", indexComponentType);
   int indexCount = cJSON_GetObjectItem(accessor, "count")->valueint;
 
-  *index_component_type = indexComponentType;
-  *index_count = indexCount;
+  info->index_component_type = indexComponentType;
+  info->index_count = indexCount;
 
   cJSON *bufferViews = cJSON_GetObjectItem(root, "bufferViews");
 
@@ -189,8 +234,8 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* 
 
   printf("position bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
 
-  *byte_offset = byteOffset;
-  *vertex_count = count;
+  info->position_byte_offset = byteOffset;
+  info->vertex_count = count;
 
   bufferView = cJSON_GetArrayItem(bufferViews, indexBufferViewIndex);
   if (!bufferView) {
@@ -206,7 +251,23 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* 
 
   printf("index bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
 
-  *index_byte_offset = byteOffset;
+  info->index_byte_offset = byteOffset;
+
+  bufferView = cJSON_GetArrayItem(bufferViews, normalBufferViewIndex);
+  if (!bufferView) {
+    fprintf(stderr, "No normal bufferView\n");
+    return NULL;
+  }
+
+  bufferIndex = cJSON_GetObjectItem(bufferView, "buffer")->valueint;
+  byteOffset = 0;
+  offset = cJSON_GetObjectItem(bufferView, "byteOffset");
+  if (offset) byteOffset = offset->valueint;
+  byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
+
+  printf("normal bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+
+  info->normal_byte_offset = byteOffset;
 
   cJSON *buffers = cJSON_GetObjectItem(root, "buffers");
 
@@ -374,19 +435,20 @@ int main(int argc, char* argv[]) {
 
   cJSON* root = parse_gltf("robot.gltf");
 
-  int byte_offset, count, index_byte_offset, index_count, index_component_type;
-  const char* uri = process_json(root, &byte_offset, &count, &index_byte_offset, &index_count, &index_component_type);
+  // int byte_offset, count, index_byte_offset, index_count, index_component_type;
+  MeshInfo info;
+  info.uri = process_json(root, &info);
 
   // load vertecies from binary file
-  float* positions = load_positions(uri, byte_offset, count);
+  float* positions = load_positions(info.uri, info.position_byte_offset, info.vertex_count);
 
-  for (int i=0; i<count; i+=3) {
+  for (int i=0; i<info.vertex_count; i+=3) {
     printf("position %d x:%f, y:%f z:%f\n", i/3, positions[i], positions[i+1], positions[i+2]);
   }
 
-  unsigned int* indices = load_indices(uri, index_byte_offset, index_count, index_component_type);
+  unsigned int* indices = load_indices(info.uri, info.index_byte_offset, info.index_count, info.index_component_type);
 
-  for (int i=0; i<index_count; i+=3) {
+  for (int i=0; i<info.index_count; i+=3) {
     printf("triangle %d indices: %d, %d %d\n", i/3, indices[i], indices[i+1], indices[i+2]);
   }    
 
