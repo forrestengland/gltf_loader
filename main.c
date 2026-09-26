@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "cJSON.h"
 
+// read a text file and return the contents
+// remember to free the returned string
 char* read_file(const char* filename) {
 
   FILE *file = fopen(filename, "rb");
@@ -35,6 +37,7 @@ char* read_file(const char* filename) {
   return jsonText;
 }
 
+// parse a gltf file and return the cJSON root object
 cJSON* parse_gltf(const char* filename) {
 
   char* jsonText = read_file(filename);
@@ -56,7 +59,9 @@ cJSON* parse_gltf(const char* filename) {
   return root;
 }
 
-const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
+// process the cJSON object. returns the path to the binary file
+// sets the binary file byte offset and vertex count for the position vertices
+const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* index_byte_offset, int* index_count, int* index_component_type) {
 
   cJSON *meshes = cJSON_GetObjectItem(root, "meshes");
 
@@ -110,6 +115,17 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
   printf("POSITION accessor: %d\n", position->valueint);
   int position_accessor = position->valueint;
 
+  cJSON *indices = cJSON_GetObjectItem(primitive, "indices");
+
+  if (!indices || !cJSON_IsNumber(indices)) {
+    fprintf(stderr, "indices not found or isn't a number\n");
+    return NULL;
+  }
+
+  int index_accessor = indices->valueint;
+
+  printf("INDEX accessor: %d\n", index_accessor);
+
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
 
   if (!accessors || !cJSON_IsArray(accessors)) {
@@ -119,10 +135,10 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
 
   printf("Number of accessors: %d\n", cJSON_GetArraySize(accessors));
 
-  cJSON *accessor = cJSON_GetArrayItem(accessors, 0);
+  cJSON *accessor = cJSON_GetArrayItem(accessors, position_accessor);
 
   if (!accessor) {
-    fprintf(stderr, "No first accessor\n");
+    fprintf(stderr, "No position accessor\n");
     return NULL;
   }
 
@@ -132,7 +148,22 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
   int count = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
   const char *type = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
 
-  printf("accessor 0 has a count of %d, %d bytes\n", count, count * 12);
+  printf("accessor %d has a count of %d, %d bytes\n", position_accessor, count, count * 12);
+
+  accessor = cJSON_GetArrayItem(accessors, index_accessor);
+
+  if (!accessor) {
+    fprintf(stderr, "No index accessor\n");
+    return NULL;
+  }
+
+  int indexBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int indexComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  printf("index component type: %d\n", indexComponentType);
+  int indexCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+
+  *index_component_type = indexComponentType;
+  *index_count = indexCount;
 
   cJSON *bufferViews = cJSON_GetObjectItem(root, "bufferViews");
 
@@ -143,10 +174,10 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
 
   printf("Number of bufferViews: %d\n", cJSON_GetArraySize(bufferViews));
 
-  cJSON *bufferView = cJSON_GetArrayItem(bufferViews, 0);
+  cJSON *bufferView = cJSON_GetArrayItem(bufferViews, bufferViewIndex);
 
   if (!bufferView) {
-    fprintf(stderr, "No first bufferView\n");
+    fprintf(stderr, "No position bufferView\n");
     return NULL;
   }
 
@@ -156,10 +187,26 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
   if (offset) byteOffset = offset->valueint;
   int byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("bufferView 0 has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+  printf("position bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
 
   *byte_offset = byteOffset;
   *vertex_count = count;
+
+  bufferView = cJSON_GetArrayItem(bufferViews, indexBufferViewIndex);
+  if (!bufferView) {
+    fprintf(stderr, "No index bufferView\n");
+    return NULL;
+  }
+
+  bufferIndex = cJSON_GetObjectItem(bufferView, "buffer")->valueint;
+  byteOffset = 0;
+  offset = cJSON_GetObjectItem(bufferView, "byteOffset");
+  if (offset) byteOffset = offset->valueint;
+  byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
+
+  printf("index bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+
+  *index_byte_offset = byteOffset;
 
   cJSON *buffers = cJSON_GetObjectItem(root, "buffers");
 
@@ -183,6 +230,7 @@ const char* process_json(cJSON* root, int* byte_offset, int* vertex_count) {
   return uri;
 }
 
+// load position vertices from a binary file. returns the loaded position float array
 float *load_positions(const char *filename, int byteOffset, int count) {
 
   FILE *file = fopen(filename, "rb");
@@ -228,14 +276,106 @@ float *load_positions(const char *filename, int byteOffset, int count) {
   return positions;
 }
 
+#include <stdint.h>
+
+unsigned int *load_indices(const char *filename, int byteOffset, int count, int componentType) {
+  
+  FILE *file = fopen(filename, "rb");
+
+  if (!file) {
+    perror(filename);
+    return NULL;
+  }
+
+  if (fseek(file, byteOffset, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to seek in %s\n", filename);
+    fclose(file);
+    return NULL;
+  }
+
+  unsigned int *indices =
+    malloc(count * sizeof(unsigned int));
+
+  if (!indices) {
+    fprintf(stderr, "Failed to allocate indices\n");
+    fclose(file);
+    return NULL;
+  }
+
+  if (componentType == 5123) {
+    /* UNSIGNED_SHORT */
+
+    uint16_t *temp =
+      malloc(count * sizeof(uint16_t));
+
+    if (!temp) {
+      fprintf(stderr, "Failed to allocate temporary indices\n");
+      free(indices);
+      fclose(file);
+      return NULL;
+    }
+
+    size_t readCount =
+      fread(temp, sizeof(uint16_t), count, file);
+
+    if (readCount != (size_t)count) {
+      fprintf(stderr,
+	      "Expected %d indices, but only read %zu\n",
+	      count,
+	      readCount);
+
+      free(temp);
+      free(indices);
+      fclose(file);
+      return NULL;
+    }
+
+    for (int i = 0; i < count; i++) {
+      indices[i] = temp[i];
+    }
+
+    free(temp);
+  }
+  else if (componentType == 5125) {
+    /* UNSIGNED_INT */
+
+    size_t readCount =
+      fread(indices, sizeof(unsigned int), count, file);
+
+    if (readCount != (size_t)count) {
+      fprintf(stderr,
+	      "Expected %d indices, but only read %zu\n",
+	      count,
+	      readCount);
+
+      free(indices);
+      fclose(file);
+      return NULL;
+    }
+  }
+  else {
+    fprintf(stderr,
+	    "Unsupported index component type: %d\n",
+	    componentType);
+
+    free(indices);
+    fclose(file);
+    return NULL;
+  }
+
+  fclose(file);
+
+  return indices;
+}
+
 int main(int argc, char* argv[]) {
   
   printf("it works\n");
 
   cJSON* root = parse_gltf("robot.gltf");
 
-  int byte_offset, count;
-  const char* uri = process_json(root, &byte_offset, &count);
+  int byte_offset, count, index_byte_offset, index_count, index_component_type;
+  const char* uri = process_json(root, &byte_offset, &count, &index_byte_offset, &index_count, &index_component_type);
 
   // load vertecies from binary file
   float* positions = load_positions(uri, byte_offset, count);
@@ -244,7 +384,14 @@ int main(int argc, char* argv[]) {
     printf("position %d x:%f, y:%f z:%f\n", i/3, positions[i], positions[i+1], positions[i+2]);
   }
 
+  unsigned int* indices = load_indices(uri, index_byte_offset, index_count, index_component_type);
+
+  for (int i=0; i<index_count; i+=3) {
+    printf("triangle %d indices: %d, %d %d\n", i/3, indices[i], indices[i+1], indices[i+2]);
+  }    
+
   free(positions);
+  free(indices);
 
   cJSON_Delete(root);
   
