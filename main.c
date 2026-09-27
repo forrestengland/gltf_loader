@@ -76,9 +76,7 @@ cJSON* parse_gltf(const char* filename) {
   return root;
 }
 
-// process the cJSON object. returns the path to the binary file
-// sets the binary file byte offset and vertex count for the position vertices
-//const char* process_json(cJSON* root, int* byte_offset, int* vertex_count, int* index_byte_offset, int* index_count, int* index_component_type) {
+// process the cJSON object. returns the path to the binary file. sets the values in the MeshInfo
 const char* process_json(cJSON* root, MeshInfo* info) {
 
   cJSON *meshes = cJSON_GetObjectItem(root, "meshes");
@@ -186,12 +184,14 @@ const char* process_json(cJSON* root, MeshInfo* info) {
   }
 
   // get relevant data from accessor
-  int normalBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint; // index to buffer view to find binary file offset
+  // index to buffer view to find binary file offset
+  int normalBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint; 
   int normalComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint; // 5126 - float
   int normalCount = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
   const char *normalType = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
 
-  printf("normal accessor %d has normalBufferViewIndex %d, normalComponentType %d, normalCount %d\n", normal_accessor, normalBufferViewIndex, normalComponentType, normalCount);
+  printf("normal accessor %d has normalBufferViewIndex %d, normalComponentType %d, normalCount %d\n",
+	 normal_accessor, normalBufferViewIndex, normalComponentType, normalCount);
   info->normal_count = normalCount;
   info->normal_component_type = normalComponentType;
 
@@ -232,7 +232,8 @@ const char* process_json(cJSON* root, MeshInfo* info) {
   if (offset) byteOffset = offset->valueint;
   int byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("position bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+  printf("position bufferView has index %d, byteOffset %d, byteLength %d\n",
+	 bufferIndex, byteOffset, byteLength);
 
   info->position_byte_offset = byteOffset;
   info->vertex_count = count;
@@ -249,7 +250,8 @@ const char* process_json(cJSON* root, MeshInfo* info) {
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("index bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+  printf("index bufferView has index %d, byteOffset %d, byteLength %d\n",
+	 bufferIndex, byteOffset, byteLength);
 
   info->index_byte_offset = byteOffset;
 
@@ -265,7 +267,8 @@ const char* process_json(cJSON* root, MeshInfo* info) {
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("normal bufferView has index %d, byteOffset %d, byteLength %d\n", bufferIndex, byteOffset, byteLength);
+  printf("normal bufferView has index %d, byteOffset %d, byteLength %d\n",
+	 bufferIndex, byteOffset, byteLength);
 
   info->normal_byte_offset = byteOffset;
 
@@ -319,8 +322,7 @@ float *load_positions(const char *filename, int byteOffset, int count) {
 
   size_t numFloats = count * 3;
 
-  size_t readCount =
-    fread(positions, sizeof(float), numFloats, file);
+  size_t readCount = fread(positions, sizeof(float), numFloats, file);
 
   fclose(file);
 
@@ -429,6 +431,46 @@ unsigned int *load_indices(const char *filename, int byteOffset, int count, int 
   return indices;
 }
 
+float *load_normals(const char *filename, int byteOffset, int count, int componentType) {
+  
+  FILE *file = fopen(filename, "rb");
+
+  if (!file) {
+    perror(filename);
+    return NULL;
+  }
+
+  if (fseek(file, byteOffset, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to seek in %s\n", filename);
+    fclose(file);
+    return NULL;
+  }
+
+  float *normals = malloc(count * 3 * sizeof(float));
+
+  if (!normals) {
+    fprintf(stderr, "Failed to allocate normals\n");
+    fclose(file);
+    return NULL;
+  }
+
+  size_t numFloats = count * 3;
+
+  size_t readCount = fread(normals, sizeof(float), numFloats, file);
+
+  fclose(file);
+
+  if (readCount != numFloats) {
+    fprintf(stderr, "Expected %zu floats, but only read %zu\n",
+	    numFloats, readCount);
+
+    free(normals);
+    return NULL;
+  }
+
+  return normals;
+}
+
 int main(int argc, char* argv[]) {
   
   printf("it works\n");
@@ -442,18 +484,35 @@ int main(int argc, char* argv[]) {
   // load vertecies from binary file
   float* positions = load_positions(info.uri, info.position_byte_offset, info.vertex_count);
 
-  for (int i=0; i<info.vertex_count; i+=3) {
-    printf("position %d x:%f, y:%f z:%f\n", i/3, positions[i], positions[i+1], positions[i+2]);
+  for (int i = 0; i < info.vertex_count; i++) {
+    printf("position %d: %f, %f, %f\n", i, positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
   }
 
-  unsigned int* indices = load_indices(info.uri, info.index_byte_offset, info.index_count, info.index_component_type);
+  unsigned int* indices = load_indices(info.uri, info.index_byte_offset,
+				       info.index_count, info.index_component_type);
 
   for (int i=0; i<info.index_count; i+=3) {
     printf("triangle %d indices: %d, %d %d\n", i/3, indices[i], indices[i+1], indices[i+2]);
   }    
 
+  float* normals = load_normals(info.uri, info.normal_byte_offset,
+				       info.normal_count, info.normal_component_type);
+  if (!normals) {
+    printf("error loading normals\n");
+    free(positions);
+    free(indices);
+    free(normals);
+    cJSON_Delete(root);
+    return 1;
+  }
+
+  for (int i = 0; i < info.normal_count; i++) {
+    printf("normal %d: %f, %f, %f\n", i, normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
+  }
+
   free(positions);
   free(indices);
+  free(normals);
 
   cJSON_Delete(root);
   
