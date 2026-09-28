@@ -4,6 +4,7 @@
 // opengl
 #include <GLES2/gl2.h>
 
+// send the model vertices to gpu
 void gpu_send_model_vertices(float* model_vertices, int vertex_count, GLuint* vertex_buffer) {
 
   glGenBuffers(1, vertex_buffer);

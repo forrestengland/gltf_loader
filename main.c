@@ -9,7 +9,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
-// custom gltf loader
+// custom headers
 #include "gltf_loader.h"
 #include "gpu.h"
 #include "f3_mat.h"
@@ -19,7 +19,8 @@
 #define SCREEN_H 480
 
 #define GLTF_FILE "robot.gltf"
-// pi
+// #define GLTF_FILE "cube.gltf"
+
 #define PI 3.1415926535
 
 #define VERTEX_SHADER_FILE "vertex_shader.glsl"
@@ -34,6 +35,10 @@ float aspect;
 SDL_Window *window;
 SDL_GLContext context;
 GLuint program;
+
+int mouseDragging = 0;
+int lastMouseX = 0;
+int lastMouseY = 0;
 
 // Time
 double getTime() {
@@ -138,6 +143,7 @@ int setup_screen(void) {
 
   // enable depth testing
   glEnable(GL_DEPTH_TEST);
+  glDisable(GL_CULL_FACE);  
   glDepthFunc(GL_LESS);
   glClearDepthf(1.0f);
   int depthBits;
@@ -172,41 +178,110 @@ int setup_screen(void) {
 // Draw OBJ model
 void draw_model(Mat4 *modelm, Mat4 *view, Mat4 *projection, Model* m, GLuint program, GLuint vertexBuffer) {
 
-  /*  float triangle[] = {
-    0.0f,  0.5f, 0.0f,
-    -0.5f, -0.5f, 0.0f,
-    0.5f, -0.5f, 0.0f
+  /*  GLuint cubeBuffer;
+
+  float cube[] = {
+    // front
+    -1, -1,  1,
+    1, -1,  1,
+    1,  1,  1,
+
+    -1, -1,  1,
+    1,  1,  1,
+    -1,  1,  1,
+
+    // back
+    -1, -1, -1,
+    1,  1, -1,
+    1, -1, -1,
+
+    -1, -1, -1,
+    -1,  1, -1,
+    1,  1, -1,
+
+    // left
+    -1, -1, -1,
+    -1, -1,  1,
+    -1,  1,  1,
+
+    -1, -1, -1,
+    -1,  1,  1,
+    -1,  1, -1,
+
+    // right
+    1, -1,  1,
+    1, -1, -1,
+    1,  1, -1,
+
+    1, -1,  1,
+    1,  1, -1,
+    1,  1,  1,
+
+    // top
+    -1,  1,  1,
+    1,  1,  1,
+    1,  1, -1,
+
+    -1,  1,  1,
+    1,  1, -1,
+    -1,  1, -1,
+
+    // bottom
+    -1, -1, -1,
+    1, -1, -1,
+    1, -1,  1,
+
+    -1, -1, -1,
+    1, -1,  1,
+    -1, -1,  1
   };
 
-  GLuint testBuffer;
+  glGenBuffers(1, &cubeBuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, cubeBuffer);
 
-  glGenBuffers(1, &testBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, testBuffer);
-
-  glBufferData(GL_ARRAY_BUFFER,
-	       sizeof(triangle),
-	       triangle,
-	       GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cube), cube, GL_STATIC_DRAW);
 
   glUseProgram(program);
 
+  glUniformMatrix4fv(
+		     matrixUniform,
+		     1,
+		     GL_FALSE,
+		     modelm->m
+		     );
+
+  glUniformMatrix4fv(
+		     projectionUniform,
+		     1,
+		     GL_FALSE,
+		     projection->m
+		     );
+
+  glUniformMatrix4fv(
+		     viewUniform,
+		     1,
+		     GL_FALSE,
+		     view->m
+		     );
+
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_DEPTH_TEST);
+
   glEnableVertexAttribArray(0);
+
   glVertexAttribPointer(
 			0,
 			3,
 			GL_FLOAT,
 			GL_FALSE,
 			3 * sizeof(float),
-			(void *)0
+			cube
 			);
 
-  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glDrawArrays(GL_TRIANGLES, 0, 36);
 
-  glDisableVertexAttribArray(0);
+  glDisableVertexAttribArray(0); */
 
-  SDL_GL_SwapWindow(window);
-  return; */
-  
   glUseProgram(program);
   glUniformMatrix4fv(matrixUniform, 1, GL_FALSE, modelm->m);
   glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, projection->m);
@@ -218,10 +293,10 @@ void draw_model(Mat4 *modelm, Mat4 *view, Mat4 *projection, Model* m, GLuint pro
   // Normal
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
-  glDrawArrays(GL_TRIANGLES, 0, m->info->vertex_count);
+  glDrawArrays(GL_TRIANGLES, 0, m->info->index_count);
 
   glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(1);  
+  glDisableVertexAttribArray(1); 
 }
 
 int main(int argc, char* argv[]) {
@@ -238,20 +313,23 @@ int main(int argc, char* argv[]) {
   load_gltf(GLTF_FILE, &model);
   float* modelVertices = model_vertices_gltf(&model);
 
-  printf("vertex_count = %d\n", model.info->vertex_count);
-  for (int i = 0; i < 5 && i < model.info->vertex_count; i++) {
-    printf("v%d: pos=(%f, %f, %f) normal=(%f, %f, %f)\n",
-           i,
-           modelVertices[i * 6 + 0],
-           modelVertices[i * 6 + 1],
-           modelVertices[i * 6 + 2],
-           modelVertices[i * 6 + 3],
-           modelVertices[i * 6 + 4],
-           modelVertices[i * 6 + 5]);
-  }
+  printf("index_count = %d\n", model.info->index_count);  
+  /*  for (int i = 0; i < model.info->index_count; i++) {
+    printf(
+	   "v%02d: pos=(% .3f, % .3f, % .3f) "
+	   "normal=(% .3f, % .3f, % .3f)\n",
+	   i,
+	   modelVertices[i * 6 + 0],
+	   modelVertices[i * 6 + 1],
+	   modelVertices[i * 6 + 2]
+	   //	   modelVertices[i * 6 + 3],
+	   //	   modelVertices[i * 6 + 4],
+	   //	   modelVertices[i * 6 + 5]
+	   );
+	   } */
 
   GLuint vertexBuffer;
-  gpu_send_model_vertices(modelVertices, model.info->vertex_count, &vertexBuffer);
+  gpu_send_model_vertices(modelVertices, model.info->index_count, &vertexBuffer);
 
   GLint bufferSize;
 
@@ -260,7 +338,7 @@ int main(int argc, char* argv[]) {
 
   printf("VBO size = %d bytes\n", bufferSize);
   printf("Expected = %d bytes\n",
-	 model.info->vertex_count * 6 * sizeof(float));
+	 model.info->index_count * 6 * sizeof(float));
 
   free(modelVertices);
 
@@ -286,7 +364,7 @@ int main(int argc, char* argv[]) {
     frameCount++;
     fpsTimer += deltaTime;
     if (fpsTimer >= 1.0) {
-      printf("FPS: %d\n", frameCount);
+      //      printf("FPS: %d\n", frameCount);
       fps = frameCount;
       frameCount = 0;
       fpsTimer = 0.0;
@@ -295,8 +373,10 @@ int main(int argc, char* argv[]) {
     // Events
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+
       if (event.type == SDL_QUIT)
 	running = 0;
+
       if (event.type == SDL_KEYDOWN) {
         printf("Key pressed: %s\n",
                SDL_GetKeyName(event.key.keysym.sym));
@@ -308,7 +388,28 @@ int main(int argc, char* argv[]) {
       if (event.type == SDL_KEYUP) {
         printf("Key released: %s\n",
                SDL_GetKeyName(event.key.keysym.sym));
-      }      
+      }
+
+      if (event.type == SDL_MOUSEBUTTONDOWN) {
+	if (event.button.button == SDL_BUTTON_LEFT) {
+	  mouseDragging = 1;
+	  lastMouseX = event.button.x;
+	  lastMouseY = event.button.y;
+	}
+      }
+
+      if (event.type == SDL_MOUSEBUTTONUP) {
+	if (event.button.button == SDL_BUTTON_LEFT) {
+	  mouseDragging = 0;
+	}
+      }
+
+      if (event.type == SDL_MOUSEMOTION && mouseDragging) {
+	int dx = event.motion.x - lastMouseX;
+	int dy = event.motion.y - lastMouseY;
+	angleY += dx * 0.05;
+	angleX += dy * 0.05;
+      }
     }
     
     // update camera based on player

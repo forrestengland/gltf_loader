@@ -504,6 +504,10 @@ void load_gltf(const char* filename, Model* model) {
   model->info = info;
   info->uri = process_json(root, info);
 
+  printf("position count = %d\n", info->vertex_count);
+  printf("index count    = %d\n", info->index_count);
+  printf("normal count   = %d\n", info->normal_count);
+
   Vertex* vertices = malloc(info->vertex_count * sizeof(Vertex));
   model->vertices = vertices;
 
@@ -517,6 +521,12 @@ void load_gltf(const char* filename, Model* model) {
 
   unsigned int* indices = load_indices(info->uri, info->index_byte_offset,
 				       info->index_count, info->index_component_type);
+
+  printf("index_count = %d\n", info->index_count);
+
+  for (int i = 0; i < info->index_count; i++) {
+    printf("index[%02d] = %u\n", i, indices[i]);
+  }
 
   model->faces = malloc(sizeof(Face) * info->index_count / 3);
   for (int i=0; i<info->index_count; i+=3) {
