@@ -53,6 +53,9 @@ typedef struct {
   Vec3 translation;
   Vec3 scale;
   Quaternion rotation;
+
+  int mesh;
+  int skin;
   
 } Node;
 
@@ -244,6 +247,11 @@ const char* process_json(cJSON* root, Model* model) {
     model->nodes[i].scale.x = 1.0f;
     model->nodes[i].scale.y = 1.0f;    
     model->nodes[i].scale.z = 1.0f;
+    model->nodes[i].mesh = -1;
+    model->nodes[i].skin = -1;
+    model->nodes[i].parent = -1;
+    model->nodes[i].children = NULL;
+    model->nodes[i].child_count = 0;
 
     // get node name
     cJSON* node = cJSON_GetArrayItem(nodes, i);
@@ -275,7 +283,57 @@ const char* process_json(cJSON* root, Model* model) {
       model->nodes[i].translation.y = ty;
       model->nodes[i].translation.z = tz;      
     }
+
+    // get node scale if provided
+    cJSON* scale = cJSON_GetObjectItem(node, "scale");
+    if (scale) {
+      float sx = cJSON_GetArrayItem(scale, 0)->valuedouble;
+      float sy = cJSON_GetArrayItem(scale, 1)->valuedouble;
+      float sz = cJSON_GetArrayItem(scale, 2)->valuedouble;
+      printf("found node scale %f, %f, %f\n", sx, sy, sz);
+      model->nodes[i].scale.x = sx;
+      model->nodes[i].scale.y = sy;
+      model->nodes[i].scale.z = sz;      
+    }
+
+    // get node children if provided
+    cJSON* children = cJSON_GetObjectItem(node, "children");
+    if (children) {
+      int childCount = cJSON_GetArraySize(children);
+      printf("number of children: %d\n", childCount);
+      model->nodes[i].child_count = childCount;
+      model->nodes[i].children = malloc(sizeof(int) * childCount);
+      for (int j=0; j<childCount; j++) {
+	model->nodes[i].children[j] = cJSON_GetArrayItem(children, j)->valueint;
+	printf("got child node index %d\n", model->nodes[i].children[j]);
+      }
+    }
+
+    // get mesh if provided
+    cJSON* nodeMesh = cJSON_GetObjectItem(node, "mesh");
+    if (nodeMesh) {
+      model->nodes[i].mesh = nodeMesh->valueint;
+      printf("found node mesh index %d\n", model->nodes[i].mesh);
+    }
+
+    // get skin if provided
+    cJSON* nodeSkin = cJSON_GetObjectItem(node, "skin");
+    if (nodeSkin) {
+      model->nodes[i].skin = nodeSkin->valueint;
+      printf("found node skin index %d\n", model->nodes[i].skin);
+    }
     
+  }
+
+  // nodes are set up, now we can set up the parent indexes
+  for (int i=0; i<model->node_count; i++) {
+    Node* node = &model->nodes[i];
+    for (int c=0; c<node->child_count; c++) {
+      int ci = node->children[c];
+      Node* child = &model->nodes[ci];
+      child->parent = i;
+      printf("setting node %d parent to %d\n", ci, i);
+    }
   }
 
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
@@ -600,6 +658,9 @@ float *load_normals(const char *filename, int byteOffset, int count, int compone
 }
 
 void cleanup_gltf(Model* model) {
+  for (int i=0; i<model->node_count; i++) {
+    if (model->nodes[i].child_count) free(model->nodes[i].children);
+  }
   free(model->nodes);
   free(model->skin->joints);
   free(model->skin);
