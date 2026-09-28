@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "f3_vec.h"
+#include "f3_mat.h"
 #include "cJSON.h"
 
 typedef struct {
@@ -24,6 +24,10 @@ typedef struct {
   int normal_byte_offset;
   int normal_count;
   int normal_component_type;
+
+  int skin_byte_offset;
+  int skin_count;
+  int skin_component_type;
   
 } MeshInfo;
 
@@ -37,9 +41,10 @@ typedef struct {
 } Face;
 
 typedef struct {
-  int inverse_bind_accessor;
   int joint_count;
   int* joints;
+  int inverse_bind_accessor;
+  Mat4* inverse_bind_matrices;
 } Skin;
 
 typedef struct {
@@ -60,6 +65,7 @@ typedef struct {
 } Node;
 
 typedef struct {
+
   MeshInfo* info;
   Vertex* vertices;
   Face* faces;
@@ -395,6 +401,21 @@ const char* process_json(cJSON* root, Model* model) {
   info->index_component_type = indexComponentType;
   info->index_count = indexCount;
 
+  // skin accessor
+  accessor = cJSON_GetArrayItem(accessors, model->skin->inverse_bind_accessor);
+  if (!accessor) {
+    fprintf(stderr, "no skin accessor\n");
+    return NULL;
+  }
+  int skinBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int skinComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  int skinBufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+  printf("got skin accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+	 model->skin->inverse_bind_accessor, skinBufferViewIndex, skinComponentType, skinBufferCount);
+
+  info->skin_component_type = skinComponentType;
+  info->skin_count = skinBufferCount;
+
   cJSON *bufferViews = cJSON_GetObjectItem(root, "bufferViews");
 
   if (!bufferViews || !cJSON_IsArray(bufferViews)) {
@@ -456,6 +477,22 @@ const char* process_json(cJSON* root, Model* model) {
 	 bufferIndex, byteOffset, byteLength);
 
   info->normal_byte_offset = byteOffset;
+
+  // skin buffer view
+  bufferView = cJSON_GetArrayItem(bufferViews, skinBufferViewIndex);
+  if (!bufferView) {
+    fprintf(stderr, "no skin bufferView\n");
+    return NULL;
+  }
+  bufferIndex = cJSON_GetObjectItem(bufferView, "buffer")->valueint;
+  byteOffset = 0;
+  offset = cJSON_GetObjectItem(bufferView, "byteOffset");
+  if (offset) byteOffset = offset->valueint;
+  byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
+  printf("skin bufferView has index %d, byteOffset %d, byteLength %d\n",
+	 bufferIndex, byteOffset, byteLength);
+
+  info->skin_byte_offset = byteOffset;
 
   cJSON *buffers = cJSON_GetObjectItem(root, "buffers");
 
@@ -657,6 +694,47 @@ float *load_normals(const char *filename, int byteOffset, int count, int compone
   return normals;
 }
 
+float* load_skin_inverse_matrices(const char* filename, int byteOffset, int count) {
+
+  FILE *file = fopen(filename, "rb");
+
+  if (!file) {
+    perror(filename);
+    return NULL;
+  }
+
+  printf("loading inverse bind matrices with byteOffset %d\n", byteOffset);
+  if (fseek(file, byteOffset, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to seek in %s\n", filename);
+    fclose(file);
+    return NULL;
+  }
+
+  float *matrices = malloc(count * 16 * sizeof(float));
+
+  if (!matrices) {
+    fprintf(stderr, "Failed to allocate inverse bind matrices\n");
+    fclose(file);
+    return NULL;
+  }
+
+  size_t numFloats = count * 16;
+  size_t readCount = fread(matrices, sizeof(float), numFloats, file);
+
+  fclose(file);
+
+  if (readCount != numFloats) {
+    fprintf(stderr, "Expected %zu floats reading inverse_bind_matrices, but only read %zu\n",
+	    numFloats, readCount);
+
+    free(matrices);
+    return NULL;
+  }
+
+  return matrices;  
+}
+
+
 void cleanup_gltf(Model* model) {
   for (int i=0; i<model->node_count; i++) {
     if (model->nodes[i].child_count) free(model->nodes[i].children);
@@ -718,7 +796,6 @@ void load_gltf(const char* filename, Model* model) {
     printf("error loading normals\n");
     free(positions);
     free(indices);
-    free(normals);
     cJSON_Delete(root);
     return;
   }
@@ -726,6 +803,17 @@ void load_gltf(const char* filename, Model* model) {
   /*  for (int i = 0; i < info->normal_count; i++) {
     printf("normal %d: %f, %f, %f\n", i, normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
     } */
+
+  float* skin_inverse_bind_matrices = load_skin_inverse_matrices(info->uri, info->skin_byte_offset,
+								 info->skin_count);
+  if (!skin_inverse_bind_matrices) {
+    printf("error loading skin inverse bind matrices\n");
+    free(positions);
+    free(indices);
+    free(normals);
+    cJSON_Delete(root);
+    return;
+  }
 
   for (int i = 0; i < info->vertex_count; i++) {
     vertices[i].position[0] = positions[i * 3 + 0];
@@ -737,13 +825,21 @@ void load_gltf(const char* filename, Model* model) {
     vertices[i].normal[2] = normals[i * 3 + 2];
   }
 
+  // setup inverse bind matrices in our model
+  model->skin->inverse_bind_matrices = malloc(sizeof(Mat4) * model->skin->joint_count);
+  for (int i=0; i<model->skin->joint_count; i++) {
+    for (int j=0; j<16; j++) {
+      model->skin->inverse_bind_matrices[i].m[j] = skin_inverse_bind_matrices[i*16+j];
+      printf("skin inverse bind matrix %d:%d:%f\n", i, j, skin_inverse_bind_matrices[i*16+j]);
+    }
+  }
+
   free(positions);
   free(indices);
   free(normals);
+  free(skin_inverse_bind_matrices);
 
   cJSON_Delete(root);
-  
-  return;
 }
 
 float* model_vertices_gltf(Model* model) {

@@ -12,7 +12,6 @@
 // custom headers
 #include "gltf_loader.h"
 #include "gpu.h"
-#include "f3_mat.h"
 
 // requested screen size for desktop
 #define SCREEN_W 640
