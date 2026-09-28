@@ -32,9 +32,16 @@ typedef struct {
 } Face;
 
 typedef struct {
+  int inverse_bind_accessor;
+  int joint_count;
+  int* joints;
+} Skin;
+
+typedef struct {
   MeshInfo* info;
   Vertex* vertices;
   Face* faces;
+  Skin* skin;
 } Model;
 
 // read a text file and return the contents
@@ -95,7 +102,7 @@ cJSON* parse_gltf(const char* filename) {
 }
 
 // process the cJSON object. returns the path to the binary file. sets the values in the MeshInfo
-const char* process_json(cJSON* root, MeshInfo* info) {
+const char* process_json(cJSON* root, MeshInfo* info, Skin* skin) {
 
   cJSON *meshes = cJSON_GetObjectItem(root, "meshes");
 
@@ -170,6 +177,29 @@ const char* process_json(cJSON* root, MeshInfo* info) {
 
   printf("INDEX accessor: %d\n", index_accessor);
 
+  // load skin
+  cJSON *skins = cJSON_GetObjectItem(root, "skins");
+  if (!skins || !cJSON_IsArray(skins)) {
+    fprintf(stderr, "skins not found or isn't an array\n");
+    return NULL;
+  }
+  // get first skin
+  printf("Number of skins: %d\n", cJSON_GetArraySize(skins));
+  cJSON* skinJSON = cJSON_GetArrayItem(skins, 0);
+  int inverseBindMatrices = cJSON_GetObjectItem(skinJSON, "inverseBindMatrices")->valueint;
+  printf("got skin inverseBindMatrices: %d\n", inverseBindMatrices);
+  skin->inverse_bind_accessor = inverseBindMatrices;
+  // load joint node indices
+  cJSON* joints = cJSON_GetObjectItem(skinJSON, "joints");
+  int jointCount = cJSON_GetArraySize(joints);
+  printf("got %d joints\n", jointCount);
+  skin->joint_count = jointCount;
+  skin->joints = malloc(sizeof(int) * skin->joint_count);
+  for (int i=0; i<skin->joint_count; i++) {
+    skin->joints[i] = cJSON_GetArrayItem(joints, i)->valueint;
+    printf("got joint %d: %d\n", i, skin->joints[i]);
+  }
+
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
 
   if (!accessors || !cJSON_IsArray(accessors)) {
@@ -187,7 +217,8 @@ const char* process_json(cJSON* root, MeshInfo* info) {
   }
 
   // get relevant data from accessor
-  int bufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint; // index to buffer view to find binary file offset
+  // index to buffer view to find binary file offset
+  int bufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint; 
   int componentType = cJSON_GetObjectItem(accessor, "componentType")->valueint; // 5126 - float
   int count = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
   const char *type = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
@@ -491,6 +522,8 @@ float *load_normals(const char *filename, int byteOffset, int count, int compone
 }
 
 void cleanup_gltf(Model* model) {
+  free(model->skin->joints);
+  free(model->skin);
   free(model->info);
   free(model->vertices);
   free(model->faces);
@@ -502,7 +535,9 @@ void load_gltf(const char* filename, Model* model) {
 
   MeshInfo* info = malloc(sizeof(*info));
   model->info = info;
-  info->uri = process_json(root, info);
+  Skin* skin = malloc(sizeof(*skin));
+  model->skin = skin;
+  info->uri = process_json(root, info, skin);
 
   printf("position count = %d\n", info->vertex_count);
   printf("index count    = %d\n", info->index_count);
@@ -524,9 +559,9 @@ void load_gltf(const char* filename, Model* model) {
 
   printf("index_count = %d\n", info->index_count);
 
-  for (int i = 0; i < info->index_count; i++) {
+  /*  for (int i = 0; i < info->index_count; i++) {
     printf("index[%02d] = %u\n", i, indices[i]);
-  }
+    } */
 
   model->faces = malloc(sizeof(Face) * info->index_count / 3);
   for (int i=0; i<info->index_count; i+=3) {

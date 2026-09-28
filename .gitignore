@@ -56,3 +56,5 @@ dkms.conf
 
 *~
 gltf_loader
+.\#*
+\#*
