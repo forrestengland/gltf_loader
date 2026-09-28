@@ -3,7 +3,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "f3_vec.h"
 #include "cJSON.h"
+
+typedef struct {
+  float x, y, z, w;
+} Quaternion;
 
 typedef struct {
   
@@ -38,10 +43,28 @@ typedef struct {
 } Skin;
 
 typedef struct {
+
+  char* name;
+
+  int parent;
+  int* children;
+  int child_count;
+
+  Vec3 translation;
+  Vec3 scale;
+  Quaternion rotation;
+  
+} Node;
+
+typedef struct {
   MeshInfo* info;
   Vertex* vertices;
   Face* faces;
   Skin* skin;
+
+  Node* nodes;
+  int node_count;
+  
 } Model;
 
 // read a text file and return the contents
@@ -102,7 +125,10 @@ cJSON* parse_gltf(const char* filename) {
 }
 
 // process the cJSON object. returns the path to the binary file. sets the values in the MeshInfo
-const char* process_json(cJSON* root, MeshInfo* info, Skin* skin) {
+const char* process_json(cJSON* root, Model* model) {
+
+  MeshInfo* info = model->info;
+  Skin* skin = model->skin;
 
   cJSON *meshes = cJSON_GetObjectItem(root, "meshes");
 
@@ -198,6 +224,58 @@ const char* process_json(cJSON* root, MeshInfo* info, Skin* skin) {
   for (int i=0; i<skin->joint_count; i++) {
     skin->joints[i] = cJSON_GetArrayItem(joints, i)->valueint;
     printf("got joint %d: %d\n", i, skin->joints[i]);
+  }
+
+  cJSON* nodes = cJSON_GetObjectItem(root, "nodes");
+  int nodeCount = cJSON_GetArraySize(nodes);
+  model->node_count = nodeCount;
+  printf("got %d nodes\n", model->node_count);
+  model->nodes = malloc(sizeof(Node) * model->node_count);
+  for (int i=0; i<model->node_count; i++) {
+
+    // load each node data. start with defaults
+    model->nodes[i].translation.x = 0.0f;
+    model->nodes[i].translation.y = 0.0f;
+    model->nodes[i].translation.z = 0.0f;
+    model->nodes[i].rotation.x = 0.0f;
+    model->nodes[i].rotation.y = 0.0f;
+    model->nodes[i].rotation.z = 0.0f;
+    model->nodes[i].rotation.w = 1.0f;
+    model->nodes[i].scale.x = 1.0f;
+    model->nodes[i].scale.y = 1.0f;    
+    model->nodes[i].scale.z = 1.0f;
+
+    // get node name
+    cJSON* node = cJSON_GetArrayItem(nodes, i);
+    model->nodes[i].name = cJSON_GetObjectItem(node, "name")->valuestring;
+    printf("node %d name '%s'\n", i, model->nodes[i].name);
+    
+    // get node rotation if provided
+    cJSON* rotation = cJSON_GetObjectItem(node, "rotation");
+    if (rotation) {
+      float rotx = cJSON_GetArrayItem(rotation, 0)->valuedouble;
+      float roty = cJSON_GetArrayItem(rotation, 1)->valuedouble;
+      float rotz = cJSON_GetArrayItem(rotation, 2)->valuedouble;
+      float rotw = cJSON_GetArrayItem(rotation, 3)->valuedouble;
+      printf("found node rotation %f, %f, %f, %f\n", rotx, roty, rotz, rotw);
+      model->nodes[i].rotation.x = rotx;
+      model->nodes[i].rotation.y = roty;
+      model->nodes[i].rotation.z = rotz;
+      model->nodes[i].rotation.w = rotw;      
+    }
+
+    // get node translation if provided
+    cJSON* translation = cJSON_GetObjectItem(node, "translation");
+    if (translation) {
+      float tx = cJSON_GetArrayItem(translation, 0)->valuedouble;
+      float ty = cJSON_GetArrayItem(translation, 1)->valuedouble;
+      float tz = cJSON_GetArrayItem(translation, 2)->valuedouble;
+      printf("found node translation %f, %f, %f\n", tx, ty, tz);
+      model->nodes[i].translation.x = tx;
+      model->nodes[i].translation.y = ty;
+      model->nodes[i].translation.z = tz;      
+    }
+    
   }
 
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
@@ -522,6 +600,7 @@ float *load_normals(const char *filename, int byteOffset, int count, int compone
 }
 
 void cleanup_gltf(Model* model) {
+  free(model->nodes);
   free(model->skin->joints);
   free(model->skin);
   free(model->info);
@@ -537,7 +616,7 @@ void load_gltf(const char* filename, Model* model) {
   model->info = info;
   Skin* skin = malloc(sizeof(*skin));
   model->skin = skin;
-  info->uri = process_json(root, info, skin);
+  info->uri = process_json(root, model);
 
   printf("position count = %d\n", info->vertex_count);
   printf("index count    = %d\n", info->index_count);
