@@ -8,6 +8,10 @@ typedef struct {
     float m[16];
 } Mat4;
 
+typedef struct {
+  float x, y, z, w;
+} Quaternion;
+
 // matrix functions
 // identity matrix
 Mat4 mat4_identity(void)
@@ -156,5 +160,42 @@ Mat4 mat4_look_at(Vec3 eye, Vec3 target, Vec3 up) {
 
   return result;
 }
+
+Mat4 quaternion_to_mat4(Quaternion q) {
+
+    Mat4 m = mat4_identity();
+
+    float x = q.x;
+    float y = q.y;
+    float z = q.z;
+    float w = q.w;
+
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+
+    float xy = x * y;
+    float xz = x * z;
+    float yz = y * z;
+
+    float wx = w * x;
+    float wy = w * y;
+    float wz = w * z;
+
+    m.m[0] = 1.0f - 2.0f * (yy + zz);
+    m.m[1] = 2.0f * (xy + wz);
+    m.m[2] = 2.0f * (xz - wy);
+
+    m.m[4] = 2.0f * (xy - wz);
+    m.m[5] = 1.0f - 2.0f * (xx + zz);
+    m.m[6] = 2.0f * (yz + wx);
+
+    m.m[8] = 2.0f * (xz + wy);
+    m.m[9] = 2.0f * (yz - wx);
+    m.m[10] = 1.0f - 2.0f * (xx + yy);
+
+    return m;
+}
+
 
 #endif

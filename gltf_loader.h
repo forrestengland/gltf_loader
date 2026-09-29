@@ -7,10 +7,6 @@
 #include "cJSON.h"
 
 typedef struct {
-  float x, y, z, w;
-} Quaternion;
-
-typedef struct {
   
   const char *uri;
 
@@ -1025,20 +1021,28 @@ void load_gltf(const char* filename, Model* model) {
 
   // load joints_0
   unsigned short *joints_0 = load_joints_0(info->uri, info->joints_0_byte_offset, info->joints_0_count);
+  if (!joints_0) {
+    printf("error loading joints 0\n");
+    return;
+  }
   for (int i=0; i<info->joints_0_count; i++) {
     for (int j=0; j<4; j++) {
       model->vertices[i].joints[j] = joints_0[i*4+j];
-      printf("vertex %d joint %d: %d\n", i, j, model->vertices[i].joints[j]);
+      //      printf("vertex %d joint %d: %d\n", i, j, model->vertices[i].joints[j]);
     }
-  }
+  } 
   
   // load weights_0
   float *weights_0 = load_weights_0(info->uri, info->weights_0_byte_offset, info->weights_0_count);
   for (int i=0; i<info->weights_0_count; i++) {
     for (int j=0; j<4; j++) {
       model->vertices[i].weights[j] = weights_0[i*4+j];
-      printf("vertex %d weight %d: %f\n", i, j, model->vertices[i].weights[j]);
+      //      printf("vertex %d joint %d: %d, weight: %f\n", i, j, model->vertices[i].joints[j], model->vertices[i].weights[j]);
     }
+  }
+  if (!weights_0) {
+    printf("error loading weights 0\n");
+    return;
   }
 
   free(positions);
@@ -1065,42 +1069,6 @@ float* model_vertices_gltf(Model* model) {
     }
   }
   return model_vertices;
-}
-
-Mat4 quaternion_to_mat4(Quaternion q) {
-
-    Mat4 m = mat4_identity();
-
-    float x = q.x;
-    float y = q.y;
-    float z = q.z;
-    float w = q.w;
-
-    float xx = x * x;
-    float yy = y * y;
-    float zz = z * z;
-
-    float xy = x * y;
-    float xz = x * z;
-    float yz = y * z;
-
-    float wx = w * x;
-    float wy = w * y;
-    float wz = w * z;
-
-    m.m[0] = 1.0f - 2.0f * (yy + zz);
-    m.m[1] = 2.0f * (xy + wz);
-    m.m[2] = 2.0f * (xz - wy);
-
-    m.m[4] = 2.0f * (xy - wz);
-    m.m[5] = 1.0f - 2.0f * (xx + zz);
-    m.m[6] = 2.0f * (yz + wx);
-
-    m.m[8] = 2.0f * (xz + wy);
-    m.m[9] = 2.0f * (yz - wx);
-    m.m[10] = 1.0f - 2.0f * (xx + yy);
-
-    return m;
 }
 
 Mat4 node_local_matrix(Node * node) {
