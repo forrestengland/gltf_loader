@@ -28,12 +28,25 @@ typedef struct {
   int skin_byte_offset;
   int skin_count;
   int skin_component_type;
-  
+
+  int joints_0_component_type;
+  int joints_0_count;
+  int joints_0_byte_offset;
+
+  int weights_0_component_type;
+  int weights_0_count;
+  int weights_0_byte_offset;
+
 } MeshInfo;
 
 typedef struct {
+
   float position[3];
   float normal[3];
+
+  unsigned short joints[4];
+  float weights[4];
+  
 } Vertex;
 
 typedef struct {
@@ -200,6 +213,30 @@ const char* process_json(cJSON* root, Model* model) {
 
   //  printf("NORMAL accessor: %d\n", normal->valueint);
   int normal_accessor = normal->valueint;
+
+  // get JOINTS_0 accessor index
+  cJSON *joints0 = cJSON_GetObjectItem(attributes, "JOINTS_0");
+
+  if (!joints0 || !cJSON_IsNumber(joints0)) {
+    fprintf(stderr, "JOINTS_0 not found or isn't a number\n");
+    return NULL;
+  }
+
+  printf("JOINTS_0 accessor: %d\n", joints0->valueint);
+  int joints_0_accessor = joints0->valueint;
+  // -----
+
+  // get WEIGHTS_0 accessor index
+  cJSON *weights0 = cJSON_GetObjectItem(attributes, "WEIGHTS_0");
+
+  if (!weights0 || !cJSON_IsNumber(weights0)) {
+    fprintf(stderr, "WEIGHTS_0 not found or isn't a number\n");
+    return NULL;
+  }
+
+  printf("WEIGHTS_0 accessor: %d\n", weights0->valueint);
+  int weights_0_accessor = weights0->valueint;
+  // -----
 
   cJSON *indices = cJSON_GetObjectItem(primitive, "indices");
 
@@ -419,6 +456,38 @@ const char* process_json(cJSON* root, Model* model) {
   info->skin_component_type = skinComponentType;
   info->skin_count = skinBufferCount;
 
+  // JOINTS_0 accessor
+  accessor = cJSON_GetArrayItem(accessors, joints_0_accessor);
+  if (!accessor) {
+    fprintf(stderr, "no JOINTS_0 accessor\n");
+    return NULL;
+  }
+  int joints0BufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int joints0ComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  int joints0BufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+  printf("got JOINTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+	 joints_0_accessor, joints0BufferViewIndex, joints0ComponentType, joints0BufferCount);
+
+  info->joints_0_component_type = joints0ComponentType;
+  info->joints_0_count = joints0BufferCount;
+  //----
+
+  // WEIGHTS_0 accessor
+  accessor = cJSON_GetArrayItem(accessors, weights_0_accessor);
+  if (!accessor) {
+    fprintf(stderr, "no WEIGHTS_0 accessor\n");
+    return NULL;
+  }
+  int weights0BufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int weights0ComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  int weights0BufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+  printf("got WEIGHTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+	 weights_0_accessor, weights0BufferViewIndex, weights0ComponentType, weights0BufferCount);
+
+  info->weights_0_component_type = weights0ComponentType;
+  info->weights_0_count = weights0BufferCount;
+  //----
+
   cJSON *bufferViews = cJSON_GetObjectItem(root, "bufferViews");
 
   if (!bufferViews || !cJSON_IsArray(bufferViews)) {
@@ -496,6 +565,38 @@ const char* process_json(cJSON* root, Model* model) {
   //	 bufferIndex, byteOffset, byteLength);
 
   info->skin_byte_offset = byteOffset;
+
+  // JOINTS_0 buffer view
+  bufferView = cJSON_GetArrayItem(bufferViews, joints0BufferViewIndex);
+  if (!bufferView) {
+    fprintf(stderr, "no JOINTS_0 bufferView\n");
+    return NULL;
+  }
+  bufferIndex = cJSON_GetObjectItem(bufferView, "buffer")->valueint;
+  byteOffset = 0;
+  offset = cJSON_GetObjectItem(bufferView, "byteOffset");
+  if (offset) byteOffset = offset->valueint;
+  byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
+  printf("JOINTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
+  	 bufferIndex, byteOffset, byteLength);
+  info->joints_0_byte_offset = byteOffset;
+  // --------------------
+
+  // JOINTS_0 buffer view
+  bufferView = cJSON_GetArrayItem(bufferViews, weights0BufferViewIndex);
+  if (!bufferView) {
+    fprintf(stderr, "no WEIGHTS_0 bufferView\n");
+    return NULL;
+  }
+  bufferIndex = cJSON_GetObjectItem(bufferView, "buffer")->valueint;
+  byteOffset = 0;
+  offset = cJSON_GetObjectItem(bufferView, "byteOffset");
+  if (offset) byteOffset = offset->valueint;
+  byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
+  printf("WEIGHTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
+  	 bufferIndex, byteOffset, byteLength);
+  info->weights_0_byte_offset = byteOffset;
+  // --------------------
 
   cJSON *buffers = cJSON_GetObjectItem(root, "buffers");
 
@@ -737,6 +838,104 @@ float* load_skin_inverse_matrices(const char* filename, int byteOffset, int coun
   return matrices;  
 }
 
+unsigned short *load_joints_0(const char *filename, int byteOffset, int count) {
+  
+  FILE *file = fopen(filename, "rb");
+
+  if (!file) {
+    perror(filename);
+    return NULL;
+  }
+
+  if (fseek(file, byteOffset, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to seek in %s\n", filename);
+    fclose(file);
+    return NULL;
+  }
+
+  unsigned short *joints_0 = malloc(count * sizeof(unsigned short) * 4);
+
+  if (!joints_0) {
+    fprintf(stderr, "Failed to allocate joints_0\n");
+    fclose(file);
+    return NULL;
+  }
+
+  /* UNSIGNED_BYTE */
+
+  uint8_t *temp = malloc(count * sizeof(uint8_t) * 4);
+
+  if (!temp) {
+    fprintf(stderr, "Failed to allocate temporary indices\n");
+    free(joints_0);
+    fclose(file);
+    return NULL;
+  }
+
+  size_t readCount = fread(temp, sizeof(uint8_t), count * 4, file);
+
+  if (readCount != (size_t)(count*4)) {
+    fprintf(stderr,
+	    "Expected %d joints_0, but only read %zu\n",
+	    count,
+	    readCount);
+
+    free(temp);
+    free(joints_0);
+    fclose(file);
+    return NULL;
+  }
+
+  for (int i = 0; i < count*4; i++) {
+    joints_0[i] = temp[i];
+  }
+
+  free(temp);
+
+  fclose(file);
+
+  return joints_0;
+}
+
+float* load_weights_0(const char* filename, int byteOffset, int count) {
+
+  FILE *file = fopen(filename, "rb");
+
+  if (!file) {
+    perror(filename);
+    return NULL;
+  }
+
+  //  printf("loading inverse bind matrices with byteOffset %d\n", byteOffset);
+  if (fseek(file, byteOffset, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to seek in %s\n", filename);
+    fclose(file);
+    return NULL;
+  }
+
+  float *weights = malloc(count * 4 * sizeof(float));
+
+  if (!weights) {
+    fprintf(stderr, "Failed to allocate weights_0\n");
+    fclose(file);
+    return NULL;
+  }
+
+  size_t numFloats = count * 4;
+  size_t readCount = fread(weights, sizeof(float), numFloats, file);
+
+  fclose(file);
+
+  if (readCount != numFloats) {
+    fprintf(stderr, "Expected %zu floats reading weights_0, but only read %zu\n",
+	    numFloats, readCount);
+
+    free(weights);
+    return NULL;
+  }
+
+  return weights;  
+}
 
 void cleanup_gltf(Model* model) {
   for (int i=0; i<model->node_count; i++) {
@@ -821,6 +1020,24 @@ void load_gltf(const char* filename, Model* model) {
     for (int j=0; j<16; j++) {
       model->skin->inverse_bind_matrices[i].m[j] = skin_inverse_bind_matrices[i*16+j];
       //      printf("skin inverse bind matrix %d:%d:%f\n", i, j, skin_inverse_bind_matrices[i*16+j]);
+    }
+  }
+
+  // load joints_0
+  unsigned short *joints_0 = load_joints_0(info->uri, info->joints_0_byte_offset, info->joints_0_count);
+  for (int i=0; i<info->joints_0_count; i++) {
+    for (int j=0; j<4; j++) {
+      model->vertices[i].joints[j] = joints_0[i*4+j];
+      printf("vertex %d joint %d: %d\n", i, j, model->vertices[i].joints[j]);
+    }
+  }
+  
+  // load weights_0
+  float *weights_0 = load_weights_0(info->uri, info->weights_0_byte_offset, info->weights_0_count);
+  for (int i=0; i<info->weights_0_count; i++) {
+    for (int j=0; j<4; j++) {
+      model->vertices[i].weights[j] = weights_0[i*4+j];
+      printf("vertex %d weight %d: %f\n", i, j, model->vertices[i].weights[j]);
     }
   }
 
