@@ -66,6 +66,17 @@ Mat4 mat4_translation(float x, float y, float z)
     return result;
 }
 
+Mat4 mat4_scale(float x, float y, float z) {
+
+  Mat4 m = mat4_identity();
+
+  m.m[0] = x;
+  m.m[5] = y;
+  m.m[10] = z;
+
+  return m;
+}
+
 // matrix multiplication
 Mat4 mat4_multiply(Mat4 a, Mat4 b)
 {

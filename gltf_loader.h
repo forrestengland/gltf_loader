@@ -106,7 +106,7 @@ char* read_file(const char* filename) {
 
   fclose(file);
 
-  printf("bytes read: %d\n", bytes_read);
+  //  printf("bytes read: %d\n", bytes_read);
 
   return jsonText;
 }
@@ -125,7 +125,7 @@ cJSON* parse_gltf(const char* filename) {
     return NULL;
   }
 
-  printf("JSON loaded successfully!\n");
+  //  printf("JSON loaded successfully!\n");
 
   /* We're done with the original text */
   free(jsonText);
@@ -146,7 +146,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("Number of meshes: %d\n", cJSON_GetArraySize(meshes));
+  //  printf("Number of meshes: %d\n", cJSON_GetArraySize(meshes));
 
   cJSON *mesh = cJSON_GetArrayItem(meshes, 0);
 
@@ -158,7 +158,7 @@ const char* process_json(cJSON* root, Model* model) {
   // get the first mesh name
   cJSON *meshName = cJSON_GetObjectItem(mesh, "name");
   char *meshNameStr = meshName->valuestring;
-  printf("found mesh 0 name '%s'\n", meshNameStr);
+  //  printf("found mesh 0 name '%s'\n", meshNameStr);
 
   cJSON *primitives = cJSON_GetObjectItem(mesh, "primitives");
 
@@ -188,7 +188,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("POSITION accessor: %d\n", position->valueint);
+  //  printf("POSITION accessor: %d\n", position->valueint);
   int position_accessor = position->valueint;
 
   cJSON *normal = cJSON_GetObjectItem(attributes, "NORMAL");
@@ -198,7 +198,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("NORMAL accessor: %d\n", normal->valueint);
+  //  printf("NORMAL accessor: %d\n", normal->valueint);
   int normal_accessor = normal->valueint;
 
   cJSON *indices = cJSON_GetObjectItem(primitive, "indices");
@@ -210,7 +210,7 @@ const char* process_json(cJSON* root, Model* model) {
 
   int index_accessor = indices->valueint;
 
-  printf("INDEX accessor: %d\n", index_accessor);
+  //  printf("INDEX accessor: %d\n", index_accessor);
 
   // load skin
   cJSON *skins = cJSON_GetObjectItem(root, "skins");
@@ -219,26 +219,26 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
   // get first skin
-  printf("Number of skins: %d\n", cJSON_GetArraySize(skins));
+  //  printf("Number of skins: %d\n", cJSON_GetArraySize(skins));
   cJSON* skinJSON = cJSON_GetArrayItem(skins, 0);
   int inverseBindMatrices = cJSON_GetObjectItem(skinJSON, "inverseBindMatrices")->valueint;
-  printf("got skin inverseBindMatrices: %d\n", inverseBindMatrices);
+  //  printf("got skin inverseBindMatrices: %d\n", inverseBindMatrices);
   skin->inverse_bind_accessor = inverseBindMatrices;
   // load joint node indices
   cJSON* joints = cJSON_GetObjectItem(skinJSON, "joints");
   int jointCount = cJSON_GetArraySize(joints);
-  printf("got %d joints\n", jointCount);
+  //  printf("got %d joints\n", jointCount);
   skin->joint_count = jointCount;
   skin->joints = malloc(sizeof(int) * skin->joint_count);
   for (int i=0; i<skin->joint_count; i++) {
     skin->joints[i] = cJSON_GetArrayItem(joints, i)->valueint;
-    printf("got joint %d: %d\n", i, skin->joints[i]);
+    //    printf("got joint %d: %d\n", i, skin->joints[i]);
   }
 
   cJSON* nodes = cJSON_GetObjectItem(root, "nodes");
   int nodeCount = cJSON_GetArraySize(nodes);
   model->node_count = nodeCount;
-  printf("got %d nodes\n", model->node_count);
+  //  printf("got %d nodes\n", model->node_count);
   model->nodes = malloc(sizeof(Node) * model->node_count);
   for (int i=0; i<model->node_count; i++) {
 
@@ -258,11 +258,14 @@ const char* process_json(cJSON* root, Model* model) {
     model->nodes[i].parent = -1;
     model->nodes[i].children = NULL;
     model->nodes[i].child_count = 0;
+    model->nodes[i].name = NULL;
 
     // get node name
     cJSON* node = cJSON_GetArrayItem(nodes, i);
-    model->nodes[i].name = cJSON_GetObjectItem(node, "name")->valuestring;
-    printf("node %d name '%s'\n", i, model->nodes[i].name);
+    char* name = cJSON_GetObjectItem(node, "name")->valuestring;
+    model->nodes[i].name = malloc(strlen(name) + 1);
+    strcpy(model->nodes[i].name, name);
+    //    printf("node %d name '%s'\n", i, model->nodes[i].name);
     
     // get node rotation if provided
     cJSON* rotation = cJSON_GetObjectItem(node, "rotation");
@@ -271,7 +274,7 @@ const char* process_json(cJSON* root, Model* model) {
       float roty = cJSON_GetArrayItem(rotation, 1)->valuedouble;
       float rotz = cJSON_GetArrayItem(rotation, 2)->valuedouble;
       float rotw = cJSON_GetArrayItem(rotation, 3)->valuedouble;
-      printf("found node rotation %f, %f, %f, %f\n", rotx, roty, rotz, rotw);
+      //      printf("found node rotation %f, %f, %f, %f\n", rotx, roty, rotz, rotw);
       model->nodes[i].rotation.x = rotx;
       model->nodes[i].rotation.y = roty;
       model->nodes[i].rotation.z = rotz;
@@ -284,7 +287,7 @@ const char* process_json(cJSON* root, Model* model) {
       float tx = cJSON_GetArrayItem(translation, 0)->valuedouble;
       float ty = cJSON_GetArrayItem(translation, 1)->valuedouble;
       float tz = cJSON_GetArrayItem(translation, 2)->valuedouble;
-      printf("found node translation %f, %f, %f\n", tx, ty, tz);
+      //      printf("found node translation %f, %f, %f\n", tx, ty, tz);
       model->nodes[i].translation.x = tx;
       model->nodes[i].translation.y = ty;
       model->nodes[i].translation.z = tz;      
@@ -296,7 +299,7 @@ const char* process_json(cJSON* root, Model* model) {
       float sx = cJSON_GetArrayItem(scale, 0)->valuedouble;
       float sy = cJSON_GetArrayItem(scale, 1)->valuedouble;
       float sz = cJSON_GetArrayItem(scale, 2)->valuedouble;
-      printf("found node scale %f, %f, %f\n", sx, sy, sz);
+      //      printf("found node scale %f, %f, %f\n", sx, sy, sz);
       model->nodes[i].scale.x = sx;
       model->nodes[i].scale.y = sy;
       model->nodes[i].scale.z = sz;      
@@ -306,12 +309,12 @@ const char* process_json(cJSON* root, Model* model) {
     cJSON* children = cJSON_GetObjectItem(node, "children");
     if (children) {
       int childCount = cJSON_GetArraySize(children);
-      printf("number of children: %d\n", childCount);
+      //      printf("number of children: %d\n", childCount);
       model->nodes[i].child_count = childCount;
       model->nodes[i].children = malloc(sizeof(int) * childCount);
       for (int j=0; j<childCount; j++) {
 	model->nodes[i].children[j] = cJSON_GetArrayItem(children, j)->valueint;
-	printf("got child node index %d\n", model->nodes[i].children[j]);
+	//	printf("got child node index %d\n", model->nodes[i].children[j]);
       }
     }
 
@@ -319,14 +322,14 @@ const char* process_json(cJSON* root, Model* model) {
     cJSON* nodeMesh = cJSON_GetObjectItem(node, "mesh");
     if (nodeMesh) {
       model->nodes[i].mesh = nodeMesh->valueint;
-      printf("found node mesh index %d\n", model->nodes[i].mesh);
+      //      printf("found node mesh index %d\n", model->nodes[i].mesh);
     }
 
     // get skin if provided
     cJSON* nodeSkin = cJSON_GetObjectItem(node, "skin");
     if (nodeSkin) {
       model->nodes[i].skin = nodeSkin->valueint;
-      printf("found node skin index %d\n", model->nodes[i].skin);
+      //      printf("found node skin index %d\n", model->nodes[i].skin);
     }
     
   }
@@ -338,7 +341,7 @@ const char* process_json(cJSON* root, Model* model) {
       int ci = node->children[c];
       Node* child = &model->nodes[ci];
       child->parent = i;
-      printf("setting node %d parent to %d\n", ci, i);
+      //      printf("setting node %d parent to %d\n", ci, i);
     }
   }
 
@@ -349,7 +352,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("Number of accessors: %d\n", cJSON_GetArraySize(accessors));
+  //  printf("Number of accessors: %d\n", cJSON_GetArraySize(accessors));
 
   cJSON *accessor = cJSON_GetArrayItem(accessors, position_accessor);
 
@@ -365,7 +368,7 @@ const char* process_json(cJSON* root, Model* model) {
   int count = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
   const char *type = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
 
-  printf("accessor %d has a count of %d, %d bytes\n", position_accessor, count, count * 12);
+  //  printf("accessor %d has a count of %d, %d bytes\n", position_accessor, count, count * 12);
 
   accessor = cJSON_GetArrayItem(accessors, normal_accessor);
 
@@ -381,8 +384,8 @@ const char* process_json(cJSON* root, Model* model) {
   int normalCount = cJSON_GetObjectItem(accessor, "count")->valueint; // number of vertices
   const char *normalType = cJSON_GetObjectItem(accessor, "type")->valuestring; // "VEC3"
 
-  printf("normal accessor %d has normalBufferViewIndex %d, normalComponentType %d, normalCount %d\n",
-	 normal_accessor, normalBufferViewIndex, normalComponentType, normalCount);
+  //  printf("normal accessor %d has normalBufferViewIndex %d, normalComponentType %d, normalCount %d\n",
+  //	 normal_accessor, normalBufferViewIndex, normalComponentType, normalCount);
   info->normal_count = normalCount;
   info->normal_component_type = normalComponentType;
 
@@ -395,7 +398,7 @@ const char* process_json(cJSON* root, Model* model) {
 
   int indexBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
   int indexComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
-  printf("index component type: %d\n", indexComponentType);
+  //  printf("index component type: %d\n", indexComponentType);
   int indexCount = cJSON_GetObjectItem(accessor, "count")->valueint;
 
   info->index_component_type = indexComponentType;
@@ -410,8 +413,8 @@ const char* process_json(cJSON* root, Model* model) {
   int skinBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
   int skinComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
   int skinBufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
-  printf("got skin accessor %d: bufferView: %d, componentType: %d, count: %d\n",
-	 model->skin->inverse_bind_accessor, skinBufferViewIndex, skinComponentType, skinBufferCount);
+  //  printf("got skin accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+  //	 model->skin->inverse_bind_accessor, skinBufferViewIndex, skinComponentType, skinBufferCount);
 
   info->skin_component_type = skinComponentType;
   info->skin_count = skinBufferCount;
@@ -423,7 +426,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("Number of bufferViews: %d\n", cJSON_GetArraySize(bufferViews));
+  //  printf("Number of bufferViews: %d\n", cJSON_GetArraySize(bufferViews));
 
   cJSON *bufferView = cJSON_GetArrayItem(bufferViews, bufferViewIndex);
 
@@ -438,8 +441,8 @@ const char* process_json(cJSON* root, Model* model) {
   if (offset) byteOffset = offset->valueint;
   int byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("position bufferView has index %d, byteOffset %d, byteLength %d\n",
-	 bufferIndex, byteOffset, byteLength);
+  //  printf("position bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //	 bufferIndex, byteOffset, byteLength);
 
   info->position_byte_offset = byteOffset;
   info->vertex_count = count;
@@ -456,8 +459,8 @@ const char* process_json(cJSON* root, Model* model) {
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("index bufferView has index %d, byteOffset %d, byteLength %d\n",
-	 bufferIndex, byteOffset, byteLength);
+  //  printf("index bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //	 bufferIndex, byteOffset, byteLength);
 
   info->index_byte_offset = byteOffset;
 
@@ -473,8 +476,8 @@ const char* process_json(cJSON* root, Model* model) {
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
 
-  printf("normal bufferView has index %d, byteOffset %d, byteLength %d\n",
-	 bufferIndex, byteOffset, byteLength);
+  //  printf("normal bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //	 bufferIndex, byteOffset, byteLength);
 
   info->normal_byte_offset = byteOffset;
 
@@ -489,8 +492,8 @@ const char* process_json(cJSON* root, Model* model) {
   offset = cJSON_GetObjectItem(bufferView, "byteOffset");
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
-  printf("skin bufferView has index %d, byteOffset %d, byteLength %d\n",
-	 bufferIndex, byteOffset, byteLength);
+  //  printf("skin bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //	 bufferIndex, byteOffset, byteLength);
 
   info->skin_byte_offset = byteOffset;
 
@@ -501,7 +504,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("Number of buffers: %d\n", cJSON_GetArraySize(buffers));
+  //  printf("Number of buffers: %d\n", cJSON_GetArraySize(buffers));
 
   cJSON *buffer = cJSON_GetArrayItem(buffers, bufferIndex); // use buffer index from above accessor
 
@@ -511,7 +514,7 @@ const char* process_json(cJSON* root, Model* model) {
   }
 
   const char *uri = cJSON_GetObjectItem(buffer, "uri")->valuestring;
-  printf("Binary file: %s\n", uri);
+  //  printf("Binary file: %s\n", uri);
 
   return uri;
 }
@@ -662,7 +665,7 @@ float *load_normals(const char *filename, int byteOffset, int count, int compone
     return NULL;
   }
 
-  printf("loading normals with byteOffset %d\n", byteOffset);
+  //  printf("loading normals with byteOffset %d\n", byteOffset);
   if (fseek(file, byteOffset, SEEK_SET) != 0) {
     fprintf(stderr, "Failed to seek in %s\n", filename);
     fclose(file);
@@ -703,7 +706,7 @@ float* load_skin_inverse_matrices(const char* filename, int byteOffset, int coun
     return NULL;
   }
 
-  printf("loading inverse bind matrices with byteOffset %d\n", byteOffset);
+  //  printf("loading inverse bind matrices with byteOffset %d\n", byteOffset);
   if (fseek(file, byteOffset, SEEK_SET) != 0) {
     fprintf(stderr, "Failed to seek in %s\n", filename);
     fclose(file);
@@ -738,6 +741,7 @@ float* load_skin_inverse_matrices(const char* filename, int byteOffset, int coun
 void cleanup_gltf(Model* model) {
   for (int i=0; i<model->node_count; i++) {
     if (model->nodes[i].child_count) free(model->nodes[i].children);
+    free(model->nodes[i].name);
   }
   free(model->nodes);
   free(model->skin->joints);
@@ -757,9 +761,9 @@ void load_gltf(const char* filename, Model* model) {
   model->skin = skin;
   info->uri = process_json(root, model);
 
-  printf("position count = %d\n", info->vertex_count);
-  printf("index count    = %d\n", info->index_count);
-  printf("normal count   = %d\n", info->normal_count);
+  //  printf("position count = %d\n", info->vertex_count);
+  //  printf("index count    = %d\n", info->index_count);
+  //  printf("normal count   = %d\n", info->normal_count);
 
   Vertex* vertices = malloc(info->vertex_count * sizeof(Vertex));
   model->vertices = vertices;
@@ -767,23 +771,13 @@ void load_gltf(const char* filename, Model* model) {
   // load vertecies from binary file
   float* positions = load_positions(info->uri, info->position_byte_offset, info->vertex_count);
 
-  /*  for (int i = 0; i < info->vertex_count; i++) {
-    printf("position %d: %f, %f, %f\n", i,
-           positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-    } */
-
   unsigned int* indices = load_indices(info->uri, info->index_byte_offset,
 				       info->index_count, info->index_component_type);
 
-  printf("index_count = %d\n", info->index_count);
-
-  /*  for (int i = 0; i < info->index_count; i++) {
-    printf("index[%02d] = %u\n", i, indices[i]);
-    } */
+  //  printf("index_count = %d\n", info->index_count);
 
   model->faces = malloc(sizeof(Face) * info->index_count / 3);
   for (int i=0; i<info->index_count; i+=3) {
-    //    printf("triangle %d indices: %d, %d %d\n", i/3, indices[i], indices[i+1], indices[i+2]);
     int face = i/3;
     model->faces[face].vertex[0] = indices[i];
     model->faces[face].vertex[1] = indices[i+1];
@@ -799,10 +793,6 @@ void load_gltf(const char* filename, Model* model) {
     cJSON_Delete(root);
     return;
   }
-
-  /*  for (int i = 0; i < info->normal_count; i++) {
-    printf("normal %d: %f, %f, %f\n", i, normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
-    } */
 
   float* skin_inverse_bind_matrices = load_skin_inverse_matrices(info->uri, info->skin_byte_offset,
 								 info->skin_count);
@@ -830,7 +820,7 @@ void load_gltf(const char* filename, Model* model) {
   for (int i=0; i<model->skin->joint_count; i++) {
     for (int j=0; j<16; j++) {
       model->skin->inverse_bind_matrices[i].m[j] = skin_inverse_bind_matrices[i*16+j];
-      printf("skin inverse bind matrix %d:%d:%f\n", i, j, skin_inverse_bind_matrices[i*16+j]);
+      //      printf("skin inverse bind matrix %d:%d:%f\n", i, j, skin_inverse_bind_matrices[i*16+j]);
     }
   }
 
@@ -858,6 +848,67 @@ float* model_vertices_gltf(Model* model) {
     }
   }
   return model_vertices;
+}
+
+Mat4 quaternion_to_mat4(Quaternion q) {
+
+    Mat4 m = mat4_identity();
+
+    float x = q.x;
+    float y = q.y;
+    float z = q.z;
+    float w = q.w;
+
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+
+    float xy = x * y;
+    float xz = x * z;
+    float yz = y * z;
+
+    float wx = w * x;
+    float wy = w * y;
+    float wz = w * z;
+
+    m.m[0] = 1.0f - 2.0f * (yy + zz);
+    m.m[1] = 2.0f * (xy + wz);
+    m.m[2] = 2.0f * (xz - wy);
+
+    m.m[4] = 2.0f * (xy - wz);
+    m.m[5] = 1.0f - 2.0f * (xx + zz);
+    m.m[6] = 2.0f * (yz + wx);
+
+    m.m[8] = 2.0f * (xz + wy);
+    m.m[9] = 2.0f * (yz - wx);
+    m.m[10] = 1.0f - 2.0f * (xx + yy);
+
+    return m;
+}
+
+Mat4 node_local_matrix(Node * node) {
+
+  Mat4 T = mat4_translation(node->translation.x,
+			    node->translation.y,
+			    node->translation.z);
+
+  Mat4 R = quaternion_to_mat4(node->rotation);
+
+  Mat4 S = mat4_scale(node->scale.x, node->scale.y, node->scale.z);
+
+  return mat4_multiply(T, mat4_multiply(R, S));
+}
+
+Mat4 get_node_world_matrix(Model * model, int nodeIndex) {
+
+  Node * node = &model->nodes[nodeIndex];
+  Mat4 local = node_local_matrix(node);
+
+  if (node->parent < 0) {
+    return local;
+  }
+  Mat4 parent = get_node_world_matrix(model, node->parent);
+  return mat4_multiply(parent, local);
 }
 
 #endif

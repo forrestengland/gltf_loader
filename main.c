@@ -312,20 +312,27 @@ int main(int argc, char* argv[]) {
   load_gltf(GLTF_FILE, &model);
   float* modelVertices = model_vertices_gltf(&model);
 
-  printf("index_count = %d\n", model.info->index_count);  
-  /*  for (int i = 0; i < model.info->index_count; i++) {
-    printf(
-	   "v%02d: pos=(% .3f, % .3f, % .3f) "
-	   "normal=(% .3f, % .3f, % .3f)\n",
-	   i,
-	   modelVertices[i * 6 + 0],
-	   modelVertices[i * 6 + 1],
-	   modelVertices[i * 6 + 2]
-	   //	   modelVertices[i * 6 + 3],
-	   //	   modelVertices[i * 6 + 4],
-	   //	   modelVertices[i * 6 + 5]
-	   );
-	   } */
+  /*  printf("joint count = %d\n", model.skin->joint_count);
+  printf("node count = %d\n", model.node_count);  
+
+  for (int j=0; j<model.skin->joint_count; j++) {
+
+    printf("inspecting joint %d\n", j);
+
+    int i = model.skin->joints[j];
+
+    printf("joint node index is %d\n", i);
+
+    Mat4 m = get_node_world_matrix(&model, i);
+    Mat4 bind = model.skin->inverse_bind_matrices[j];
+    Mat4 joint_matrix = mat4_multiply(m, bind);
+    
+    printf("got joint matrix for joint %d, node %d '%s':\n", j, i, model.nodes[i].name);
+    printf("[%f][%f][%f][%f]\n", joint_matrix.m[0], joint_matrix.m[4], joint_matrix.m[8], joint_matrix.m[12]);
+    printf("[%f][%f][%f][%f]\n", joint_matrix.m[1], joint_matrix.m[5], joint_matrix.m[9], joint_matrix.m[13]);
+    printf("[%f][%f][%f][%f]\n", joint_matrix.m[2], joint_matrix.m[6], joint_matrix.m[10], joint_matrix.m[14]);
+    printf("[%f][%f][%f][%f]\n", joint_matrix.m[3], joint_matrix.m[7], joint_matrix.m[11], joint_matrix.m[15]);
+    } */
 
   GLuint vertexBuffer;
   gpu_send_model_vertices(modelVertices, model.info->index_count, &vertexBuffer);
