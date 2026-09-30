@@ -236,6 +236,7 @@ void apply_animation_channel(Model *model, int channelIndex, float time) {
   AnimationSampler *sampler = &model->anim->samplers[channel->sampler];
 
   int keyframe = (int)(time / (1.0f / 24.0f));
+  //  printf("apply keyframe: %d\n", keyframe);
 
   if (keyframe >= sampler->keyframe_count)
     keyframe = sampler->keyframe_count - 1;
@@ -249,7 +250,12 @@ void apply_animation_channel(Model *model, int channelIndex, float time) {
     q.z = sampler->values[keyframe * 4 + 2];
     q.w = sampler->values[keyframe * 4 + 3];
 
-    model->nodes[channel->node].rotation = q;
+    //    printf("got apply rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w);
+
+    model->nodes[channel->node].rotation.x = q.x;
+    model->nodes[channel->node].rotation.y = q.y;
+    model->nodes[channel->node].rotation.z = q.z;
+    model->nodes[channel->node].rotation.w = q.w;    
   }
 }
 
@@ -374,7 +380,8 @@ int main(int argc, char* argv[]) {
     }
 
     // animation
-    int keyframe = (int)(animationTime / (1.0f / 24.0f));
+    /*    int keyframe = (int)(animationTime / (1.0f / 24.0f));
+    printf("static keyframe: %d\n", keyframe);
     if (keyframe >= 60)
       keyframe = 59;
 
@@ -390,11 +397,10 @@ int main(int argc, char* argv[]) {
     model.nodes[11].rotation.z = q.z;
     model.nodes[11].rotation.w = q.w;
 
-    //    printf("got rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w);
+    printf("got static rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w); */
 
+    apply_animation_channel(&model, 0, animationTime);
     update_joint_matrices(&model, jointMatricesUniform);
-
-    //    apply_animation_channel(&model, 0, animationTime);
     
     // update camera based on player
     Vec3 cameraPosition = {0.0, 0.0, 8.0f};
