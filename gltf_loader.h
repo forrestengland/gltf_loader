@@ -119,7 +119,7 @@ typedef struct {
   int node_count;
 
   float* anim_outputs;
-  
+  Animation* anim;
   
 } Model;
 
@@ -420,25 +420,56 @@ const char* process_json(cJSON* root, Model* model) {
   cJSON* animations = cJSON_GetObjectItem(root, "animations");
   int animationCount = cJSON_GetArraySize(animations);
   printf("got %d animations\n", animationCount);
+  
   // get first animation
   cJSON* animation = cJSON_GetArrayItem(animations, 0);
-  printf("got animation '%s'\n", cJSON_GetObjectItem(animation, "name")->valuestring);
+  
+  char* animName = cJSON_GetObjectItem(animation, "name")->valuestring;
+  printf("got animation '%s'\n", animName);
+  model->anim->name = malloc(strlen(animName) + 1);
+  strcpy(model->anim->name, animName);
+    
   cJSON* channels = cJSON_GetObjectItem(animation, "channels");
-  // get first channel
+
+  model->anim->sampler_count = 1;
+  model->anim->channel_count = 1;
+  model->anim->samplers = malloc(sizeof(AnimationSampler));
+  model->anim->channels = malloc(sizeof(AnimationChannel));  
+  
+  // get a channel
   cJSON* channel = cJSON_GetArrayItem(channels, 1);
-  printf("channel 0 sampler: %d\n", cJSON_GetObjectItem(channel, "sampler")->valueint);
+
+  int samplerNum = cJSON_GetObjectItem(channel, "sampler")->valueint;
+  printf("channel 0 sampler: %d\n", samplerNum);
+  //  model->anim->channels[0].sampler = samplerNum;
+  model->anim->channels[0].sampler = 0;
+  
   cJSON* target = cJSON_GetObjectItem(channel, "target");
-  printf("channel 0 target node: %d, path: %s\n", cJSON_GetObjectItem(target, "node")->valueint,
-	 cJSON_GetObjectItem(target, "path")->valuestring);
+
+  int targetVal = cJSON_GetObjectItem(target, "node")->valueint;
+  model->anim->channels[0].node = targetVal;
+
+  char* pathVal = cJSON_GetObjectItem(target, "path")->valuestring;
+  model->anim->channels[0].path = malloc(strlen(pathVal) + 1);
+  strcpy(model->anim->channels[0].path, pathVal);
+  printf("channel 0 target node: %d, path: %s\n", targetVal, pathVal);
+  
   // get the sampler for this first channel
   cJSON* samplers = cJSON_GetObjectItem(animation, "samplers");
-  cJSON* sampler = cJSON_GetArrayItem(samplers, cJSON_GetObjectItem(channel, "sampler")->valueint);
-  printf("sampler %d input: %d, interpolation: %s, output: %d\n", cJSON_GetObjectItem(channel, "sampler")->valueint,
-	 cJSON_GetObjectItem(sampler, "input")->valueint,
-	 cJSON_GetObjectItem(sampler, "interpolation")->valuestring,
-	 cJSON_GetObjectItem(sampler, "output")->valueint);
+  
+  cJSON* sampler = cJSON_GetArrayItem(samplers, samplerNum);
+
+  char* interpVal = cJSON_GetObjectItem(sampler, "interpolation")->valuestring;
+  model->anim->samplers[0].interpolation = malloc(strlen(interpVal) + 1);
+  strcpy(model->anim->samplers[0].interpolation, interpVal);
+  
   int samplerInputAccessor = cJSON_GetObjectItem(sampler, "input")->valueint;
   int samplerOutputAccessor = cJSON_GetObjectItem(sampler, "output")->valueint;  
+
+  printf("sampler %d input: %d, interpolation: %s, output: %d\n", samplerNum,
+	 samplerInputAccessor,
+	 interpVal,
+	 samplerOutputAccessor);
   // ------------------------------------
 
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
@@ -1169,6 +1200,10 @@ void cleanup_gltf(Model* model) {
   free(model->vertices);
   free(model->faces);
   free(model->anim_outputs);
+  free(model->anim->name);
+  free(model->anim->samplers);
+  free(model->anim->channels);
+  free(model->anim);
 }
 
 void load_gltf(const char* filename, Model* model) {
@@ -1179,6 +1214,8 @@ void load_gltf(const char* filename, Model* model) {
   model->info = info;
   Skin* skin = malloc(sizeof(*skin));
   model->skin = skin;
+  Animation* anim = malloc(sizeof(*anim));
+  model->anim = anim;
   info->uri = process_json(root, model);
 
   //  printf("position count = %d\n", info->vertex_count);
@@ -1276,43 +1313,41 @@ void load_gltf(const char* filename, Model* model) {
     printf("error loading inputs\n");
     goto cleanup;
   }
+
+  model->anim->samplers[0].keyframe_count = info->anim_sample_input_count;
+  model->anim->samplers[0].times = malloc(sizeof(float) * info->anim_sample_input_count);
+  
   for (int i=0; i<info->anim_sample_input_count; i++) {
-    if (strcmp(info->anim_sample_input_type, "VEC3") == 0) {
+    /*    if (strcmp(info->anim_sample_input_type, "VEC3") == 0) {
       printf("got input vec3 %d: %f, %f, %f\n", i,
 	     inputs[i*3], inputs[i*3+1], inputs[i*3+2]);
     } else if (strcmp(info->anim_sample_input_type, "MAT4") == 0) {
       printf("got input mat4 %d: %f, %f, %f, %f\n", i,
 	     inputs[i*4], inputs[i*4+1], inputs[i*4+2], inputs[i*4+3]);
-    } else if (strcmp(info->anim_sample_input_type, "SCALAR") == 0) {
-      printf("got input scalar %d: %f\n", i,
-	     inputs[i]);
+	     } else if (strcmp(info->anim_sample_input_type, "SCALAR") == 0) { */
+    //    printf("got input scalar %d: %f\n", i, inputs[i]);
+    model->anim->samplers[0].times[i] = inputs[i];
 
-    }
+      //    }
 
   }
 
-  float* outputs = load_anim_sample(info->uri, info->anim_sample_output_byte_offset, info->anim_sample_output_count, info->anim_sample_output_type);
+  float* outputs = load_anim_sample(info->uri, info->anim_sample_output_byte_offset,
+				    info->anim_sample_output_count, info->anim_sample_output_type);
   if (!outputs) {
     printf("error loading outputs\n");
     goto cleanup;
   }
+
+  //  model->anim->samplers[0].value_components = info->anim_sample_output_count;
+  model->anim->samplers[0].value_components = 4;
+  model->anim->samplers[0].values = malloc(sizeof(float) * 4 * info->anim_sample_output_count);
+  
   for (int i=0; i<info->anim_sample_output_count; i++) {
-    if (strcmp(info->anim_sample_output_type, "VEC3") == 0) {
-      printf("got output vec3 %d: %f, %f, %f\n", i,
-	     outputs[i*3], outputs[i*3+1], outputs[i*3+2]);
-    } else if (strcmp(info->anim_sample_output_type, "VEC4") == 0) {
-      printf("got output vec4 %d: %f, %f, %f, %f\n", i,
-	     outputs[i*4], outputs[i*4+1], outputs[i*4+2], outputs[i*4+3]);
-    } else if (strcmp(info->anim_sample_output_type, "SCALAR") == 0) {
-      printf("got output scalar %d: %f\n", i,
-	     outputs[i]);
-    } else if (strcmp(info->anim_sample_output_type, "MAT4") == 0) {
-      printf("got output vec4 %d:\n[%f][%f][%f][%f]\n[%f][%f][%f][%f]\n[%f][%f][%f][%f]\n[%f][%f][%f][%f]\n", i,
-	     outputs[i*4], outputs[i*4+4], outputs[i*4+8], outputs[i*4+12],
-	     outputs[i*4+1], outputs[i*4+5], outputs[i*4+9], outputs[i*4+13],
-	     outputs[i*4+2], outputs[i*4+6], outputs[i*4+10], outputs[i*4+14],
-	     outputs[i*4+3], outputs[i*4+7], outputs[i*4+11], outputs[i*4+15]); 
-    }
+    model->anim->samplers[0].values[i*4] = outputs[i*4];
+    model->anim->samplers[0].values[i*4+1] = outputs[i*4+1];
+    model->anim->samplers[0].values[i*4+2] = outputs[i*4+2];
+    model->anim->samplers[0].values[i*4+3] = outputs[i*4+3];
   }
   model->anim_outputs = outputs;
 

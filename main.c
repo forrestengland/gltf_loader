@@ -230,6 +230,29 @@ void update_joint_matrices(Model * model, GLint jointMatricesUniform) {
   free(jointMatrices);  
 }
 
+void apply_animation_channel(Model *model, int channelIndex, float time) {
+
+  AnimationChannel *channel = &model->anim->channels[channelIndex];
+  AnimationSampler *sampler = &model->anim->samplers[channel->sampler];
+
+  int keyframe = (int)(time / (1.0f / 24.0f));
+
+  if (keyframe >= sampler->keyframe_count)
+    keyframe = sampler->keyframe_count - 1;
+
+  if (strcmp(channel->path, "rotation") == 0) {
+
+    Quaternion q;
+
+    q.x = sampler->values[keyframe * 4 + 0];
+    q.y = sampler->values[keyframe * 4 + 1];
+    q.z = sampler->values[keyframe * 4 + 2];
+    q.w = sampler->values[keyframe * 4 + 3];
+
+    model->nodes[channel->node].rotation = q;
+  }
+}
+
 int main(int argc, char* argv[]) {
   
   Model model;
@@ -370,6 +393,8 @@ int main(int argc, char* argv[]) {
     //    printf("got rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w);
 
     update_joint_matrices(&model, jointMatricesUniform);
+
+    //    apply_animation_channel(&model, 0, animationTime);
     
     // update camera based on player
     Vec3 cameraPosition = {0.0, 0.0, 8.0f};
