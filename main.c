@@ -255,7 +255,28 @@ void apply_animation_channel(Model *model, int channelIndex, float time) {
     model->nodes[channel->node].rotation.x = q.x;
     model->nodes[channel->node].rotation.y = q.y;
     model->nodes[channel->node].rotation.z = q.z;
-    model->nodes[channel->node].rotation.w = q.w;    
+    model->nodes[channel->node].rotation.w = q.w;
+    
+  } else if (strcmp(channel->path, "translation") == 0) {
+
+    Vec3 t;
+    t.x = sampler->values[keyframe * 3 + 0];
+    t.y = sampler->values[keyframe * 3 + 1];
+    t.z = sampler->values[keyframe * 3 + 2];
+
+    model->nodes[channel->node].translation.x = t.x;
+    model->nodes[channel->node].translation.y = t.y;
+    model->nodes[channel->node].translation.z = t.z;
+    
+  } else if (strcmp(channel->path, "scale") == 0) {
+
+    Vec3 scale;
+
+    scale.x = sampler->values[keyframe * 3 + 0];
+    scale.y = sampler->values[keyframe * 3 + 1];
+    scale.z = sampler->values[keyframe * 3 + 2];
+
+    model->nodes[channel->node].scale = scale;
   }
 }
 
