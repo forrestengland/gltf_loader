@@ -207,6 +207,29 @@ void draw_model(Mat4 *modelm, Mat4 *view, Mat4 *projection, Model* m, GLuint pro
   glDisableVertexAttribArray(1); 
 }
 
+void update_joint_matrices(Model * model, GLint jointMatricesUniform) {
+
+  // send joint matrices to gpu
+  glUseProgram(program);
+
+  Mat4 * jointMatrices = malloc(sizeof(Mat4) * model->skin->joint_count);
+  for (int j=0; j<model->skin->joint_count; j++) {
+
+    int i = model->skin->joints[j];
+
+    Mat4 m = get_node_world_matrix(model, i);
+    Mat4 bind = model->skin->inverse_bind_matrices[j];
+    Mat4 joint_matrix = mat4_multiply(m, bind);
+    jointMatrices[j] = joint_matrix;
+  }
+  glUniformMatrix4fv(jointMatricesUniform, model->skin->joint_count, GL_FALSE,
+		     (const GLfloat *)jointMatrices);
+  GLenum err = glGetError();
+  if (err != GL_NO_ERROR)
+    printf("after joint upload: GL error: 0x%x\n", err);
+  free(jointMatrices);  
+}
+
 int main(int argc, char* argv[]) {
   
   Model model;
@@ -252,27 +275,8 @@ int main(int argc, char* argv[]) {
 
   free(modelVertices);
 
-  // send joint matrices to gpu
-  glUseProgram(program);
   GLint jointMatricesUniform = glGetUniformLocation(program, "jointMatrices");
   printf("jointMatricesUniform = %d\n", jointMatricesUniform);
-  
-  Mat4 * jointMatrices = malloc(sizeof(Mat4) * model.skin->joint_count);
-  for (int j=0; j<model.skin->joint_count; j++) {
-
-    int i = model.skin->joints[j];
-
-    Mat4 m = get_node_world_matrix(&model, i);
-    Mat4 bind = model.skin->inverse_bind_matrices[j];
-    Mat4 joint_matrix = mat4_multiply(m, bind);
-    jointMatrices[j] = joint_matrix;
-  }
-  glUniformMatrix4fv(jointMatricesUniform, model.skin->joint_count, GL_FALSE,
-		     (const GLfloat *)jointMatrices);
-  GLenum err = glGetError();
-  if (err != GL_NO_ERROR)
-    printf("after joint upload: GL error: 0x%x\n", err);
-  free(jointMatrices);
 
   // projection matrix
   Mat4 projection = mat4_perspective(60.0f * PI / 180.0f, aspect, 0.1f, 100.0f);
@@ -284,6 +288,8 @@ int main(int argc, char* argv[]) {
   int frameCount = 0;
   double fpsTimer = 0.0;
   int fps = 0;
+
+  float animationTime = 0.041667f;
 
   // Main loop
   while (running) {
@@ -343,6 +349,27 @@ int main(int argc, char* argv[]) {
 	angleX += dy * 0.05;
       }
     }
+
+    // animation
+    int keyframe = (int)(animationTime / (1.0f / 24.0f));
+    if (keyframe >= 60)
+      keyframe = 59;
+
+    Quaternion q;
+
+    q.x = model.anim_outputs[keyframe * 4 + 0];
+    q.y = model.anim_outputs[keyframe * 4 + 1];
+    q.z = model.anim_outputs[keyframe * 4 + 2];
+    q.w = model.anim_outputs[keyframe * 4 + 3];
+
+    model.nodes[11].rotation.x = q.x;
+    model.nodes[11].rotation.y = q.y;
+    model.nodes[11].rotation.z = q.z;
+    model.nodes[11].rotation.w = q.w;
+
+    //    printf("got rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w);
+
+    update_joint_matrices(&model, jointMatricesUniform);
     
     // update camera based on player
     Vec3 cameraPosition = {0.0, 0.0, 8.0f};
@@ -372,6 +399,10 @@ int main(int argc, char* argv[]) {
 
     // Display frame
     SDL_GL_SwapWindow(window);
+
+    animationTime += deltaTime;
+    if (animationTime > 2.5f)
+      animationTime = 0.041667f;
   }
 
   // Cleanup
