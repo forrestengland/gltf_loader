@@ -218,7 +218,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("JOINTS_0 accessor: %d\n", joints0->valueint);
+  //  printf("JOINTS_0 accessor: %d\n", joints0->valueint);
   int joints_0_accessor = joints0->valueint;
   // -----
 
@@ -230,7 +230,7 @@ const char* process_json(cJSON* root, Model* model) {
     return NULL;
   }
 
-  printf("WEIGHTS_0 accessor: %d\n", weights0->valueint);
+  //  printf("WEIGHTS_0 accessor: %d\n", weights0->valueint);
   int weights_0_accessor = weights0->valueint;
   // -----
 
@@ -378,6 +378,31 @@ const char* process_json(cJSON* root, Model* model) {
     }
   }
 
+  // ------- load animations --------------
+  cJSON* animations = cJSON_GetObjectItem(root, "animations");
+  int animationCount = cJSON_GetArraySize(animations);
+  printf("got %d animations\n", animationCount);
+  // get first animation
+  cJSON* animation = cJSON_GetArrayItem(animations, 0);
+  printf("got animation '%s'\n", cJSON_GetObjectItem(animation, "name")->valuestring);
+  cJSON* channels = cJSON_GetObjectItem(animation, "channels");
+  // get first channel
+  cJSON* channel = cJSON_GetArrayItem(channels, 0);
+  printf("channel 0 sampler: %d\n", cJSON_GetObjectItem(channel, "sampler")->valueint);
+  cJSON* target = cJSON_GetObjectItem(channel, "target");
+  printf("channel 0 target node: %d, path: %s\n", cJSON_GetObjectItem(target, "node")->valueint,
+	 cJSON_GetObjectItem(target, "path")->valuestring);
+  // get the sampler for this first channel
+  cJSON* samplers = cJSON_GetObjectItem(animation, "samplers");
+  cJSON* sampler = cJSON_GetArrayItem(samplers, cJSON_GetObjectItem(channel, "sampler")->valueint);
+  printf("sampler %d input: %d, interpolation: %s, output: %d\n", cJSON_GetObjectItem(channel, "sampler")->valueint,
+	 cJSON_GetObjectItem(sampler, "input")->valueint,
+	 cJSON_GetObjectItem(sampler, "interpolation")->valuestring,
+	 cJSON_GetObjectItem(sampler, "output")->valueint);
+  int samplerInputAccessor = cJSON_GetObjectItem(sampler, "input")->valueint;
+  int samplerOutputAccessor = cJSON_GetObjectItem(sampler, "output")->valueint;  
+  // ------------------------------------
+
   cJSON *accessors = cJSON_GetObjectItem(root, "accessors");
 
   if (!accessors || !cJSON_IsArray(accessors)) {
@@ -461,8 +486,8 @@ const char* process_json(cJSON* root, Model* model) {
   int joints0BufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
   int joints0ComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
   int joints0BufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
-  printf("got JOINTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
-	 joints_0_accessor, joints0BufferViewIndex, joints0ComponentType, joints0BufferCount);
+  //  printf("got JOINTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+  //	 joints_0_accessor, joints0BufferViewIndex, joints0ComponentType, joints0BufferCount);
 
   info->joints_0_component_type = joints0ComponentType;
   info->joints_0_count = joints0BufferCount;
@@ -477,12 +502,38 @@ const char* process_json(cJSON* root, Model* model) {
   int weights0BufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
   int weights0ComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
   int weights0BufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
-  printf("got WEIGHTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
-	 weights_0_accessor, weights0BufferViewIndex, weights0ComponentType, weights0BufferCount);
+  //  printf("got WEIGHTS_0 accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+  //	 weights_0_accessor, weights0BufferViewIndex, weights0ComponentType, weights0BufferCount);
 
   info->weights_0_component_type = weights0ComponentType;
   info->weights_0_count = weights0BufferCount;
   //----
+
+  // ----------------- animation channel 0 sampler input accessor ----------------------------
+  accessor = cJSON_GetArrayItem(accessors, samplerInputAccessor);
+  if (!accessor) {
+    fprintf(stderr, "no sampler input accessor\n");
+    return NULL;
+  }
+  int samplerInputBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int samplerInputComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  int samplerInputBufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+  printf("got sampler input accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+	 samplerInputAccessor, samplerInputBufferViewIndex, samplerInputComponentType, samplerInputBufferCount);
+  // ------------------------------------------------------------------------------------
+
+  // ----------------- animation channel 0 sampler output accessor ----------------------------
+  accessor = cJSON_GetArrayItem(accessors, samplerOutputAccessor);
+  if (!accessor) {
+    fprintf(stderr, "no sampler output accessor\n");
+    return NULL;
+  }
+  int samplerOutputBufferViewIndex = cJSON_GetObjectItem(accessor, "bufferView")->valueint;
+  int samplerOutputComponentType = cJSON_GetObjectItem(accessor, "componentType")->valueint;
+  int samplerOutputBufferCount = cJSON_GetObjectItem(accessor, "count")->valueint;
+  printf("got sampler output accessor %d: bufferView: %d, componentType: %d, count: %d\n",
+	 samplerOutputAccessor, samplerOutputBufferViewIndex, samplerOutputComponentType, samplerOutputBufferCount);
+  // ------------------------------------------------------------------------------------
 
   cJSON *bufferViews = cJSON_GetObjectItem(root, "bufferViews");
 
@@ -573,8 +624,8 @@ const char* process_json(cJSON* root, Model* model) {
   offset = cJSON_GetObjectItem(bufferView, "byteOffset");
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
-  printf("JOINTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
-  	 bufferIndex, byteOffset, byteLength);
+  //  printf("JOINTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //  	 bufferIndex, byteOffset, byteLength);
   info->joints_0_byte_offset = byteOffset;
   // --------------------
 
@@ -589,8 +640,8 @@ const char* process_json(cJSON* root, Model* model) {
   offset = cJSON_GetObjectItem(bufferView, "byteOffset");
   if (offset) byteOffset = offset->valueint;
   byteLength = cJSON_GetObjectItem(bufferView, "byteLength")->valueint;
-  printf("WEIGHTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
-  	 bufferIndex, byteOffset, byteLength);
+  //  printf("WEIGHTS_0 bufferView has index %d, byteOffset %d, byteLength %d\n",
+  //  	 bufferIndex, byteOffset, byteLength);
   info->weights_0_byte_offset = byteOffset;
   // --------------------
 
