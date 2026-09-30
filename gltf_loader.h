@@ -1054,20 +1054,40 @@ void load_gltf(const char* filename, Model* model) {
 }
 
 float* model_vertices_gltf(Model* model) {
+
   // put the data in the format opengl expects it
+  
   int vertex_count = model->info->index_count;
-  float *model_vertices = malloc(vertex_count * 6 * sizeof(float));
+  
+  float *model_vertices = malloc(vertex_count * 14 * sizeof(float));
+  
   for (int i = 0; i < model->info->index_count / 3; i++) {
+
     for (int j = 0; j < 3; j++) {
+
       unsigned int index = model->faces[i].vertex[j];
-      model_vertices[(i * 3 + j) * 6 + 0] = model->vertices[index].position[0];
-      model_vertices[(i * 3 + j) * 6 + 1] = model->vertices[index].position[1];
-      model_vertices[(i * 3 + j) * 6 + 2] = model->vertices[index].position[2];
-      model_vertices[(i * 3 + j) * 6 + 3] = model->vertices[index].normal[0];
-      model_vertices[(i * 3 + j) * 6 + 4] = model->vertices[index].normal[1];
-      model_vertices[(i * 3 + j) * 6 + 5] = model->vertices[index].normal[2];
+
+      model_vertices[(i * 3 + j) * 14 + 0] = model->vertices[index].position[0];
+      model_vertices[(i * 3 + j) * 14 + 1] = model->vertices[index].position[1];
+      model_vertices[(i * 3 + j) * 14 + 2] = model->vertices[index].position[2];
+      
+      model_vertices[(i * 3 + j) * 14 + 3] = model->vertices[index].normal[0];
+      model_vertices[(i * 3 + j) * 14 + 4] = model->vertices[index].normal[1];
+      model_vertices[(i * 3 + j) * 14 + 5] = model->vertices[index].normal[2];
+      
+      model_vertices[(i * 3 + j) * 14 + 6] = model->vertices[index].joints[0];
+      model_vertices[(i * 3 + j) * 14 + 7] = model->vertices[index].joints[1];
+      model_vertices[(i * 3 + j) * 14 + 8] = model->vertices[index].joints[2];
+      model_vertices[(i * 3 + j) * 14 + 9] = model->vertices[index].joints[3];      
+      
+      model_vertices[(i * 3 + j) * 14 + 10] = model->vertices[index].weights[0];
+      model_vertices[(i * 3 + j) * 14 + 11] = model->vertices[index].weights[1];
+      model_vertices[(i * 3 + j) * 14 + 12] = model->vertices[index].weights[2];
+      model_vertices[(i * 3 + j) * 14 + 13] = model->vertices[index].weights[3];      
     }
+
   }
+  
   return model_vertices;
 }
 

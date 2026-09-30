@@ -79,7 +79,9 @@ void createProgram(void) {
   glAttachShader(program, fragmentShader);
 
   glBindAttribLocation(program, 0, "position");
-  glBindAttribLocation(program, 1, "normal");    
+  glBindAttribLocation(program, 1, "normal");
+  glBindAttribLocation(program, 2, "joints");
+  glBindAttribLocation(program, 3, "weights");      
 
   glLinkProgram(program);
 
@@ -140,6 +142,10 @@ int setup_screen(void) {
   printf("GL renderer: %s\n", glGetString(GL_RENDERER));
   printf("GL version: %s\n", glGetString(GL_VERSION));
 
+  GLint maxVertexUniforms;
+  glGetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &maxVertexUniforms);
+  printf("Max vertex uniform vectors: %d\n", maxVertexUniforms);
+
   // enable depth testing
   glEnable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);  
@@ -177,110 +183,6 @@ int setup_screen(void) {
 // Draw OBJ model
 void draw_model(Mat4 *modelm, Mat4 *view, Mat4 *projection, Model* m, GLuint program, GLuint vertexBuffer) {
 
-  /*  GLuint cubeBuffer;
-
-  float cube[] = {
-    // front
-    -1, -1,  1,
-    1, -1,  1,
-    1,  1,  1,
-
-    -1, -1,  1,
-    1,  1,  1,
-    -1,  1,  1,
-
-    // back
-    -1, -1, -1,
-    1,  1, -1,
-    1, -1, -1,
-
-    -1, -1, -1,
-    -1,  1, -1,
-    1,  1, -1,
-
-    // left
-    -1, -1, -1,
-    -1, -1,  1,
-    -1,  1,  1,
-
-    -1, -1, -1,
-    -1,  1,  1,
-    -1,  1, -1,
-
-    // right
-    1, -1,  1,
-    1, -1, -1,
-    1,  1, -1,
-
-    1, -1,  1,
-    1,  1, -1,
-    1,  1,  1,
-
-    // top
-    -1,  1,  1,
-    1,  1,  1,
-    1,  1, -1,
-
-    -1,  1,  1,
-    1,  1, -1,
-    -1,  1, -1,
-
-    // bottom
-    -1, -1, -1,
-    1, -1, -1,
-    1, -1,  1,
-
-    -1, -1, -1,
-    1, -1,  1,
-    -1, -1,  1
-  };
-
-  glGenBuffers(1, &cubeBuffer);
-  glBindBuffer(GL_ARRAY_BUFFER, cubeBuffer);
-
-  glBufferData(GL_ARRAY_BUFFER, sizeof(cube), cube, GL_STATIC_DRAW);
-
-  glUseProgram(program);
-
-  glUniformMatrix4fv(
-		     matrixUniform,
-		     1,
-		     GL_FALSE,
-		     modelm->m
-		     );
-
-  glUniformMatrix4fv(
-		     projectionUniform,
-		     1,
-		     GL_FALSE,
-		     projection->m
-		     );
-
-  glUniformMatrix4fv(
-		     viewUniform,
-		     1,
-		     GL_FALSE,
-		     view->m
-		     );
-
-  glDisable(GL_CULL_FACE);
-  glDisable(GL_DEPTH_TEST);
-
-  glEnableVertexAttribArray(0);
-
-  glVertexAttribPointer(
-			0,
-			3,
-			GL_FLOAT,
-			GL_FALSE,
-			3 * sizeof(float),
-			cube
-			);
-
-  glDrawArrays(GL_TRIANGLES, 0, 36);
-
-  glDisableVertexAttribArray(0); */
-
   glUseProgram(program);
   glUniformMatrix4fv(matrixUniform, 1, GL_FALSE, modelm->m);
   glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, projection->m);
@@ -288,10 +190,17 @@ void draw_model(Mat4 *modelm, Mat4 *view, Mat4 *projection, Model* m, GLuint pro
   glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
   // Position
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void *)0);
   // Normal
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void *)(3 * sizeof(float)));
+  // joints
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void *)(6 * sizeof(float)));  
+  // weights
+  glEnableVertexAttribArray(3);
+  glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void *)(10 * sizeof(float)));  
+  
   glDrawArrays(GL_TRIANGLES, 0, m->info->index_count);
 
   glDisableVertexAttribArray(0);
@@ -310,29 +219,24 @@ int main(int argc, char* argv[]) {
   int running = 1;
   
   load_gltf(GLTF_FILE, &model);
+
+  // add manual rotation test
+  for (int i = 0; i < model.node_count; i++) {
+    if (strcmp(model.nodes[i].name, "Bone.003") == 0) {
+      Node *node = &model.nodes[i];
+
+      node->rotation.x = 0.0f;
+      node->rotation.y = 0.0f;
+      node->rotation.z = sinf(90.0f * PI / 360.0f);
+      node->rotation.w = cosf(90.0f * PI / 360.0f);
+      //      node->rotation.z = 0.0;
+      //      node->rotation.w = 1.0;
+
+      break;
+    }
+  }
+  
   float* modelVertices = model_vertices_gltf(&model);
-
-  /*  printf("joint count = %d\n", model.skin->joint_count);
-  printf("node count = %d\n", model.node_count);  
-
-  for (int j=0; j<model.skin->joint_count; j++) {
-
-    printf("inspecting joint %d\n", j);
-
-    int i = model.skin->joints[j];
-
-    printf("joint node index is %d\n", i);
-
-    Mat4 m = get_node_world_matrix(&model, i);
-    Mat4 bind = model.skin->inverse_bind_matrices[j];
-    Mat4 joint_matrix = mat4_multiply(m, bind);
-    
-    printf("got joint matrix for joint %d, node %d '%s':\n", j, i, model.nodes[i].name);
-    printf("[%f][%f][%f][%f]\n", joint_matrix.m[0], joint_matrix.m[4], joint_matrix.m[8], joint_matrix.m[12]);
-    printf("[%f][%f][%f][%f]\n", joint_matrix.m[1], joint_matrix.m[5], joint_matrix.m[9], joint_matrix.m[13]);
-    printf("[%f][%f][%f][%f]\n", joint_matrix.m[2], joint_matrix.m[6], joint_matrix.m[10], joint_matrix.m[14]);
-    printf("[%f][%f][%f][%f]\n", joint_matrix.m[3], joint_matrix.m[7], joint_matrix.m[11], joint_matrix.m[15]);
-    } */
 
   GLuint vertexBuffer;
   gpu_send_model_vertices(modelVertices, model.info->index_count, &vertexBuffer);
@@ -344,9 +248,31 @@ int main(int argc, char* argv[]) {
 
   printf("VBO size = %d bytes\n", bufferSize);
   printf("Expected = %d bytes\n",
-	 model.info->index_count * 6 * sizeof(float));
+	 model.info->index_count * 14 * sizeof(float));
 
   free(modelVertices);
+
+  // send joint matrices to gpu
+  glUseProgram(program);
+  GLint jointMatricesUniform = glGetUniformLocation(program, "jointMatrices");
+  printf("jointMatricesUniform = %d\n", jointMatricesUniform);
+  
+  Mat4 * jointMatrices = malloc(sizeof(Mat4) * model.skin->joint_count);
+  for (int j=0; j<model.skin->joint_count; j++) {
+
+    int i = model.skin->joints[j];
+
+    Mat4 m = get_node_world_matrix(&model, i);
+    Mat4 bind = model.skin->inverse_bind_matrices[j];
+    Mat4 joint_matrix = mat4_multiply(m, bind);
+    jointMatrices[j] = joint_matrix;
+  }
+  glUniformMatrix4fv(jointMatricesUniform, model.skin->joint_count, GL_FALSE,
+		     (const GLfloat *)jointMatrices);
+  GLenum err = glGetError();
+  if (err != GL_NO_ERROR)
+    printf("after joint upload: GL error: 0x%x\n", err);
+  free(jointMatrices);
 
   // projection matrix
   Mat4 projection = mat4_perspective(60.0f * PI / 180.0f, aspect, 0.1f, 100.0f);
@@ -443,8 +369,6 @@ int main(int argc, char* argv[]) {
     if (err != GL_NO_ERROR) {
       printf("GL error: 0x%x\n", err);
     }
-    //    printf("vertexBuffer = %u\n", vertexBuffer);
-    //    printf("vertex_count = %d\n", model.info->vertex_count);    
 
     // Display frame
     SDL_GL_SwapWindow(window);
