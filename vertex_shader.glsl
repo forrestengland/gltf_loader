@@ -19,6 +19,14 @@ void main()
         + weights.z * jointMatrices[int(joints.z)] * vec4(position, 1.0)
         + weights.w * jointMatrices[int(joints.w)] * vec4(position, 1.0);
 
+    vec3 skinnedNormal = 
+         weights.x * mat3(jointMatrices[int(joints.x)]) * normal
+        + weights.y * mat3(jointMatrices[int(joints.y)]) * normal
+        + weights.z * mat3(jointMatrices[int(joints.z)]) * normal
+        + weights.w * mat3(jointMatrices[int(joints.w)]) * normal;
+
+    vertexNormal = normalize(skinnedNormal);
+
     vertexNormal = normal;
 
     gl_Position =

@@ -221,7 +221,7 @@ int main(int argc, char* argv[]) {
   load_gltf(GLTF_FILE, &model);
 
   // add manual rotation test
-  for (int i = 0; i < model.node_count; i++) {
+  /*  for (int i = 0; i < model.node_count; i++) {
     if (strcmp(model.nodes[i].name, "Bone.003") == 0) {
       Node *node = &model.nodes[i];
 
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
 
       break;
     }
-  }
+    } */
   
   float* modelVertices = model_vertices_gltf(&model);
 
