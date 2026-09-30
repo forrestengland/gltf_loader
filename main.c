@@ -420,7 +420,10 @@ int main(int argc, char* argv[]) {
 
     printf("got static rotation q: %f, %f, %f, %f\n", q.x, q.y, q.z, q.w); */
 
-    apply_animation_channel(&model, 0, animationTime);
+    for (int i=0; i<model.anim->channel_count; i++) {
+      apply_animation_channel(&model, i, animationTime);
+    }
+    
     update_joint_matrices(&model, jointMatricesUniform);
     
     // update camera based on player
